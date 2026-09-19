@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "agenttest-posts",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-19",
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "agenttest-posts",
+      "database_id": "64e4d1fc-0c9d-4feb-b7f2-fa06248ad3e5",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "SITE_TITLE": "Local Models",
+    "SITE_DESCRIPTION": "Notes on running language models on your own hardware.",
+    // Public origin of the deployed blog. CI reads this for its post-deploy gate,
+    // so it must be the real production URL. Local dev overrides it in .dev.vars.
+    "SITE_ORIGIN": "https://agenttest-posts.leonardomgutierrez.workers.dev"
+  }
+}

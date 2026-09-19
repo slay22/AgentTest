@@ -1,0 +1,28 @@
+{
+  "name": "agenttest-posts",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "node scripts/write-version.mjs && wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "types": "wrangler types --include-runtime=false",
+    "db:migrate:local": "wrangler d1 migrations apply agenttest-posts --local",
+    "db:migrate:remote": "wrangler d1 migrations apply agenttest-posts --remote",
+    "seed": "node scripts/seed.ts",
+    "seed:sql": "node scripts/export-sql.ts"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260814.1",
+    "typescript": "^5.9.2",
+    "vite": "^7.3.6",
+    "vitest": "^3.2.4",
+    "wrangler": "^4.30.0"
+  },
+  "dependencies": {
+    "marked": "^18.0.13",
+    "zod": "^4.4.3"
+  }
+}

@@ -1,0 +1,19 @@
+# Local development secrets for `wrangler dev`. Copy to `.dev.vars` and fill in.
+# `.dev.vars` is gitignored; `.dev.vars.example` is not.
+#
+# `.dev.vars` overrides `vars` from wrangler.jsonc during local dev, which is how
+# SITE_ORIGIN is localhost here while production uses the deployed URL.
+
+# Shared secret presented when publishing locally (used by `npm run seed`).
+# Generate one with: openssl rand -hex 32
+PUBLISH_TOKEN=replace-me
+
+# The publish API refuses all traffic unless this is exactly "true". Deliberately
+# separate from PUBLISH_TOKEN so the route can be killed without rotating the
+# token — the same pattern as receiptScanner's MCP_ENABLE.
+#
+# Local dev wants it on. PRODUCTION MUST LEAVE IT UNSET: the blog is public, so
+# production should expose no write surface at all. CI asserts this.
+PUBLISH_ENABLED=true
+
+SITE_ORIGIN=http://127.0.0.1:8787

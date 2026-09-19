@@ -1,0 +1,153 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The Flue agent in the repo root. It is not deployed from CI yet — it still
+  # runs against a local model — so this job only tests it.
+  agent:
+    name: agent checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 22.19 is the floor, not a preference: it is the first release where
+      # TypeScript type-stripping is on by default, which `node
+      # tests/verify-claims.check.ts` relies on, and it is also Flue's minimum
+      # supported version.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.19'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run check:types
+
+      - name: Tests (claim-verification rules)
+        run: npm run check:verify-claims
+
+  # The public blog.
+  site:
+    name: site checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.19'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Generate Worker types (worker-configuration.d.ts is gitignored)
+        run: npx wrangler types --include-runtime=false
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests (vitest)
+        run: npm test
+
+      - name: Wrangler dry-run
+        run: npx wrangler deploy --dry-run
+
+  deploy:
+    # Only on pushes to main (not PRs). Requires the repository secrets
+    # CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID; without them the deploy is
+    # skipped with a warning so the workflow does not fail before they exist.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [agent, site]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.19'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Configuration is filled in
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        run: |
+          if grep -qE 'REPLACE_WITH_YOUR_D1_DATABASE_ID|YOUR-SUBDOMAIN' wrangler.jsonc; then
+            echo "::error title=site/wrangler.jsonc is not configured::Replace the placeholders: run 'npx wrangler d1 create agenttest-posts' and paste the database_id, and set SITE_ORIGIN to the deployed URL."
+            exit 1
+          fi
+
+      # Migrations are applied deliberately, never from CI, so a schema change is
+      # always a reviewed step rather than a side effect of a push. Apply new ones
+      # with `npm run db:migrate:remote` BEFORE deploying code that depends on them.
+      - name: Deploy
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        run: npm run deploy
+
+      - name: Post-deploy gate
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        run: |
+          ORIGIN=$(grep -oE '"SITE_ORIGIN": *"[^"]+"' wrangler.jsonc | sed -E 's/.*"(https[^"]+)".*/\1/')
+          echo "origin: $ORIGIN"
+          fail() { echo "::error::$1"; exit 1; }
+
+          # The blog is public by design, so the root must answer 200. This is the
+          # inverse of receiptScanner's gate, which asserts 302 (Access still up).
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$ORIGIN/")
+          test "$code" = "200" || fail "blog root returned $code, expected 200"
+
+          # Every response carries the deploy version, including assets.
+          version=$(curl -sI --max-time 20 "$ORIGIN/" | tr -d '\r' \
+            | awk -F': ' 'tolower($1)=="x-deploy-version"{print $2}')
+          test -n "$version" || fail "x-deploy-version header missing from the root response"
+          echo "deployed version: $version"
+
+          health=$(curl -s --max-time 20 "$ORIGIN/api/health")
+          echo "health: $health"
+          echo "$health" | grep -q '"ok":true' || fail "/api/health did not report ok:true"
+
+          # A public blog needs to be discoverable.
+          for path in /sitemap.xml /feed.xml /robots.txt; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$ORIGIN$path")
+            test "$code" = "200" || fail "$path returned $code, expected 200"
+          done
+
+          # The important one: production must expose NO write surface. The blog is
+          # public, so publishing is disabled there and the private agent writes D1
+          # directly. If this ever returns something other than 403, either
+          # PUBLISH_ENABLED was set on the deployment or the route lost its guard.
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 \
+            -X POST "$ORIGIN/api/posts" -H 'content-type: application/json' -d '{}')
+          test "$code" = "403" || fail "POST /api/posts returned $code, expected 403 — production should have no write surface (leave PUBLISH_ENABLED unset)"
+
+          echo "Post-deploy gate passed."
+
+      - name: Warning — deploy skipped (no token)
+        if: env.CLOUDFLARE_API_TOKEN == ''
+        run: |
+          echo "::warning title=Deploy skipped::Add the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repository secrets to enable auto-deploys from main."
+          echo "Create a token at dash.cloudflare.com → My Profile → API Tokens → 'Edit Cloudflare Workers' template."

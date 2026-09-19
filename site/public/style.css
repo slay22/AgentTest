@@ -1,0 +1,84 @@
+/* Deliberately small: a static stylesheet is free to serve and costs no CPU. */
+
+:root {
+	--fg: #16181d;
+	--muted: #6b7280;
+	--accent: #1f6feb;
+	--rule: #e5e7eb;
+	--bg: #ffffff;
+	--code-bg: #f6f8fa;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--fg: #e6e8eb;
+		--muted: #9aa2ad;
+		--accent: #6cb6ff;
+		--rule: #2a2f37;
+		--bg: #101216;
+		--code-bg: #1a1d23;
+	}
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+	margin: 0 auto;
+	padding: 2.5rem 1.25rem 4rem;
+	max-width: 42rem;
+	background: var(--bg);
+	color: var(--fg);
+	font: 17px/1.65 ui-serif, Georgia, "Times New Roman", serif;
+}
+
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+
+header.site { margin-bottom: 2.5rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--rule); }
+.site-title { font-size: 1.35rem; font-weight: 700; text-decoration: none; color: var(--fg); letter-spacing: -0.01em; }
+.site-description { margin: 0.35rem 0 0; color: var(--muted); font-size: 0.95rem; }
+
+h1 { font-size: 1.9rem; line-height: 1.2; letter-spacing: -0.02em; margin: 0 0 0.75rem; }
+h2 { font-size: 1.3rem; line-height: 1.3; letter-spacing: -0.01em; margin: 2.25rem 0 0.75rem; }
+h3 { font-size: 1.1rem; margin: 1.75rem 0 0.5rem; }
+
+p { margin: 0 0 1rem; }
+
+.post-meta { color: var(--muted); font-size: 0.875rem; font-family: ui-sans-serif, system-ui, sans-serif; margin: 0 0 1rem; }
+.post-description { margin: 0.25rem 0 0.4rem; color: var(--fg); }
+
+ul.post-list { list-style: none; margin: 0; padding: 0; }
+ul.post-list > li { padding: 1.5rem 0; border-bottom: 1px solid var(--rule); }
+ul.post-list > li:last-child { border-bottom: none; }
+.post-link { font-size: 1.2rem; font-weight: 600; text-decoration: none; color: var(--fg); }
+.post-link:hover { text-decoration: underline; text-decoration-color: var(--accent); }
+
+.tag {
+	display: inline-block;
+	padding: 0.05rem 0.45rem;
+	border: 1px solid var(--rule);
+	border-radius: 999px;
+	font-size: 0.75rem;
+	color: var(--muted);
+	text-decoration: none;
+	font-family: ui-sans-serif, system-ui, sans-serif;
+}
+a.tag:hover { border-color: var(--accent); color: var(--accent); }
+
+.prose img { max-width: 100%; height: auto; }
+.prose blockquote { margin: 1.25rem 0; padding: 0 1rem; border-left: 3px solid var(--rule); color: var(--muted); }
+.prose code { background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; font-size: 0.875em; }
+.prose pre { background: var(--code-bg); padding: 1rem; border-radius: 8px; overflow-x: auto; }
+.prose pre code { background: none; padding: 0; }
+.prose hr { border: none; border-top: 1px solid var(--rule); margin: 2rem 0; }
+
+.sources { margin-top: 3rem; padding-top: 1.25rem; border-top: 1px solid var(--rule); }
+.sources h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 0.5rem; font-family: ui-sans-serif, system-ui, sans-serif; }
+.sources ul { margin: 0; padding-left: 1.1rem; }
+.sources li { font-size: 0.85rem; color: var(--muted); word-break: break-all; }
+
+.empty { color: var(--muted); font-style: italic; }
+.back { margin-top: 2.5rem; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.9rem; }
+
+footer.site { margin-top: 4rem; padding-top: 1.25rem; border-top: 1px solid var(--rule); color: var(--muted); font-size: 0.85rem; font-family: ui-sans-serif, system-ui, sans-serif; }
