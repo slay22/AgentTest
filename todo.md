@@ -211,11 +211,27 @@ Done: `publish_post` now pushes to the live blog's D1 over the REST API, so a po
 published locally appears on the site without a manual seed. What remains is moving the
 agent itself onto Cloudflare.
 
-- **Drafts need durable storage.** `useSandbox(local({}))` has no counterpart on Workers.
-  Cloudflare Computer (SQLite-backed workspace in the agent's own Durable Object) is the
-  drop-in: it keeps Flue's `read`/`write`/`edit`/`bash`/`grep`/`glob` tools, so the existing
-  drafts/ workflow and the skills do not have to change. Add with
-  `npx flue add sandbox cloudflare-computer`.
+- **Drafts need durable storage, and the obvious answer turns out to be gated.**
+  `useSandbox(local({}))` has no counterpart on Workers. Cloudflare Computer would be the
+  drop-in — it keeps Flue's `read`/`write`/`edit`/`bash`/`grep`/`glob` tools, so the drafts
+  workflow and the skills would not change — but it is **not usable here**:
+  - Flue's own docs: `@cloudflare/computer` is "an early preview from Cloudflare — suitable for
+    experiments and prototypes, **not production**".
+  - The shell runs through a `worker_loaders` binding that is **beta-gated, so the account needs
+    access**. That, not cost, is the blocker.
+  - Its free-tier component (SQLite-backed Durable Objects) *is* available on Workers Free, so
+    cost is probably fine; explicit pricing for the Dynamic Worker part could not be verified.
+
+  Cloudflare Sandbox is out too: Containers are Workers Paid only, with included usage starting
+  at **$5/month** and `N/A` on Free.
+
+  **Recommended instead: a custom Flue sandbox adapter over R2.** R2 is a key-to-blob store, which
+  maps directly onto files, so implementing Flue's `Sandbox` interface gives the agent its
+  `drafts/<slug>.md` paths and its `read`/`write`/`edit` tools back with no prompt or skill
+  changes. R2's free tier (10 GB, 1M Class A and 10M Class B operations per month) is far beyond
+  what a blog needs, and it needs no beta access and no paid plan. The trade-off is that
+  `exec` is not implementable this way, so the `bash` tool is likely unavailable — acceptable,
+  since drafting uses read/write/edit, not shell.
 - **Drafts belong in a second D1 database**, bound only by the agent, so the public Worker
   physically cannot read unreviewed work.
 - Flue's Cloudflare target needs `vite.config.ts` with `flue()` + `@cloudflare/vite-plugin`,

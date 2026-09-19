@@ -155,8 +155,14 @@ jobs:
 
           echo "Post-deploy gate passed."
 
-      - name: Warning — deploy skipped (no token)
+      # A deploy job that goes green without deploying anything is worse than one that
+      # fails: this workflow passed for several commits while skipping every real step.
+      # Pull requests still pass without secrets; a push to main does not.
+      - name: No token — cannot deploy from main
         if: env.CLOUDFLARE_API_TOKEN == ''
         run: |
-          echo "::warning title=Deploy skipped::Add the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repository secrets to enable auto-deploys from main."
-          echo "Create a token at dash.cloudflare.com → My Profile → API Tokens → 'Edit Cloudflare Workers' template."
+          echo "::error title=Deploy skipped on main::This push to main expected a deploy, but CLOUDFLARE_API_TOKEN is not set, so nothing was deployed."
+          echo "Add the repository secrets:"
+          echo "  CLOUDFLARE_API_TOKEN  — dash.cloudflare.com > My Profile > API Tokens > 'Edit Cloudflare Workers' template"
+          echo "  CLOUDFLARE_ACCOUNT_ID — the account id shown in the Workers overview"
+          exit 1
