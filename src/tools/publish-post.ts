@@ -1,27 +1,42 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { copyFile, mkdir } from 'node:fs/promises';
-import { basename, dirname, join, resolve } from 'node:path';
+import { publishDraft, resolveDraft } from './drafts.ts';
 
-export const publishPost = defineTool({
-	name: 'publish_post',
-	description:
-		'Publish one finished draft: copies a markdown file into the blog publish directory (BLOG_PUBLISH_DIR env var). Input: draftPath — the path to the markdown draft to publish (e.g. "drafts/my-post.md"). Call only after the user explicitly approves the post.',
-	input: v.object({
-		draftPath: v.string(),
-	}),
-	async run({ data }) {
-		const destDir = process.env.BLOG_PUBLISH_DIR;
-		if (!destDir) {
-			throw new Error('BLOG_PUBLISH_DIR is not set. Ask the user to add it to .env with the path where published posts go.');
-		}
-		const src = resolve(data.draftPath);
-		if (!src.endsWith('.md')) {
-			throw new Error(`Refusing to publish ${src}: only .md files can be published.`);
-		}
-		const dest = join(resolve(destDir), basename(src));
-		await mkdir(dirname(dest), { recursive: true });
-		await copyFile(src, dest);
-		return { output: { published: true, destination: dest } };
-	},
-});
+/**
+ * Publishes one draft, but only if `isApproved` says the user approved it.
+ *
+ * The tool is only mounted once at least one approval exists, and it re-checks
+ * the specific path here, so a draft the user never approved cannot be
+ * published even if the mount is reachable.
+ */
+export function publishPost(isApproved: (absDraftPath: string) => boolean) {
+	return defineTool({
+		name: 'publish_post',
+		description:
+			'Copy one approved draft into the blog\'s publish directory. Call this immediately after approve_draft, with the same draftPath. If the result says the draft is not approved, the user has not approved it — ask them, and do not retry on your own. Input: draftPath (e.g. "drafts/my-post.md").',
+		input: v.object({
+			draftPath: v.string(),
+		}),
+		async run({ data }) {
+			const abs = await resolveDraft(data.draftPath);
+
+			if (!isApproved(abs)) {
+				return {
+					output: {
+						published: false,
+						reason: 'not_approved',
+						detail: `${data.draftPath} has not been approved for publication by the user. Ask them whether to publish it, then call approve_draft with their exact words.`,
+					},
+				};
+			}
+
+			const result = await publishDraft(abs);
+			return {
+				output: {
+					published: true,
+					...result,
+				},
+			};
+		},
+	});
+}
