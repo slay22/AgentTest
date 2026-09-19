@@ -6,7 +6,8 @@
 		"check:types": "tsc --noEmit",
 		"check:verify-claims": "node tests/verify-claims.check.ts",
 		"check:drafts": "node tests/drafts.check.ts",
-		"check:remote": "node tests/remote-blog.check.ts"
+		"check:remote": "node tests/remote-blog.check.ts",
+		"check:approval": "node tests/approval.check.ts"
 	},
 	"dependencies": {
 		"@earendil-works/pi-ai": "^0.83.0",

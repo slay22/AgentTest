@@ -2,36 +2,55 @@ import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
-import { publishDraft, resolveDraft } from './drafts.ts';
+import type { Approval } from './approve-draft.ts';
+import { contentHash, publishDraft, publishedBytes, resolveDraft } from './drafts.ts';
 import { postForRemote, pushPostToBlog } from './remote-blog.ts';
 
 /**
- * Publishes one draft, but only if `isApproved` says the user approved it.
+ * Publishes one draft, but only if the user approved *this text*.
  *
- * The tool is only mounted once at least one approval exists, and it re-checks
- * the specific path here, so a draft the user never approved cannot be
- * published even if the mount is reachable.
+ * Three checks, in order of how hard they are to defeat: the tool is only mounted
+ * once an approval exists; the specific path must be in the approval map; and the
+ * draft's current content must still hash to what was approved. The third is the
+ * one that matters most — without it, an approval survives an edit, so approving a
+ * draft and then rewriting it would publish text the user never saw.
  */
 export function publishPost(
-	isApproved: (absDraftPath: string) => boolean,
-	options: { approvalFor?: (absDraftPath: string) => string | null } = {},
+	getApproval: (absDraftPath: string) => Approval | null,
+	options: { now?: () => Date } = {},
 ) {
+	const now = options.now ?? (() => new Date());
 	return defineTool({
 		name: 'publish_post',
 		description:
-			'Copy one approved draft into the blog\'s publish directory, setting its frontmatter `draft` flag to false. Call this immediately after approve_draft, with the same draftPath. If the result says the draft is not approved, the user has not approved it — ask them, and do not retry on your own. Report the draftFlag outcome to the user accurately: only "flipped" means a draft flag was actually changed. Input: draftPath (e.g. "drafts/my-post.md").',
+			'Copy one approved draft into the blog\'s publish directory, setting its frontmatter `draft` flag to false, and push it to the live blog. Call this immediately after approve_draft, with the same draftPath, without editing the draft first. If the result says draft_changed_since_approval, you edited the draft after the user approved it: the approval is void, so tell the user what changed and ask them to approve again. If the result says the draft is not approved, the user has not approved it — ask them, and do not retry on your own. Report the draftFlag outcome and whether the live blog was updated, literally as returned. Input: draftPath (e.g. "drafts/my-post.md").',
 		input: v.object({
 			draftPath: v.string(),
 		}),
 		async run({ data }) {
 			const abs = await resolveDraft(data.draftPath);
+			const source = await readFile(abs, 'utf8');
 
-			if (!isApproved(abs)) {
+			const approval = getApproval(abs);
+			if (!approval) {
 				return {
 					output: {
 						published: false,
 						reason: 'not_approved',
 						detail: `${data.draftPath} has not been approved for publication by the user. Ask them whether to publish it, then call approve_draft with their exact words.`,
+					},
+				};
+			}
+
+			// The bytes publication would write, hashed the same way approve_draft did.
+			const currentHash = await contentHash(publishedBytes(source));
+			if (currentHash !== approval.hash) {
+				return {
+					output: {
+						published: false,
+						reason: 'draft_changed_since_approval',
+						detail:
+							`${data.draftPath} has changed since the user approved it, so the approval no longer applies and nothing was published. The user approved different text (their words: "${approval.quote}", approved ${approval.approvedAt}). Tell them what you changed and ask them to approve the current draft again.`,
 					},
 				};
 			}
@@ -42,9 +61,9 @@ export function publishPost(
 			// Rendering and row-building go through the same mapping the bulk seed
 			// script uses, so the two cannot produce different posts.
 			const remote = await pushPostToBlog(
-				postForRemote(basename(abs), await readFile(abs, 'utf8'), {
-					today: new Date().toISOString().slice(0, 10),
-					approved_quote: options.approvalFor?.(abs) ?? null,
+				postForRemote(basename(abs), source, {
+					today: now().toISOString().slice(0, 10),
+					approved_quote: approval.quote,
 				}),
 			);
 

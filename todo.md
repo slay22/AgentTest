@@ -67,6 +67,22 @@ by model-directed code. Same for `TAVILY_API_KEY`. A scoped key with a spend cap
 pragmatic mitigation; a real fix is moving publishing (and maybe verification) out of the
 agent's sandbox.
 
+
+### 5b. ~~Approval survived an edit to the draft~~ — FIXED
+
+Approval was keyed on the draft *path*, so it outlived the text it referred to. Approve a
+draft, rewrite it, publish: the gate passed and published words the user never saw. A realistic
+path to that, not a theoretical one — the agent edits drafts constantly.
+
+**Fixed** by hashing the bytes publication would write (`publishedBytes` + SHA-256 over Web
+Crypto, so it works on the Workers target too) and recording that with the approval. `publish_post`
+re-hashes the current draft and refuses with `draft_changed_since_approval`, naming the user's
+original words and when they approved, so the agent can explain what changed and ask again.
+
+The hash covers published bytes rather than the raw file, so the `draft: false` flip is inside
+what was approved, and two drafts that publish identically hash identically. 15 checks in
+`tests/approval.check.ts`, including whitespace-only edits and a no-frontmatter file.
+
 ---
 
 ## Decided
@@ -135,6 +151,11 @@ including the free-tier pacing rule for `mistral-small` (1 request/second, 20k t
 ## Next up
 
 ### 6. Verify the approval quote before recording it
+
+Still open. Note the *content* half of the gate is now fixed — see the entry below — so what
+remains is only whether the quoted words actually constitute approval. A Telegram inline button
+resolves this properly (a press is a genuine human signal), so this may be better solved by the
+channel than by a model judgement.
 
 `src/tools/approve-draft.ts:18` validates `userQuote` with `v.minLength(1)`. One character
 passes. The entire judgment that the quote constitutes approval — and approves *this* post —

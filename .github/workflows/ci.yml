@@ -40,6 +40,9 @@ jobs:
       - name: Tests (frontmatter draft flag)
         run: npm run check:drafts
 
+      - name: Tests (approval binds to content)
+        run: npm run check:approval
+
       - name: Tests (D1 push to the live blog)
         run: npm run check:remote
 

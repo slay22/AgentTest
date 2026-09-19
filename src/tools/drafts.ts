@@ -130,6 +130,28 @@ export function applyDraftFlag(source: string): {
 }
 
 /**
+ * The exact bytes that publication would write for this source.
+ *
+ * Approval hashes these rather than the raw draft, so the hash covers precisely
+ * what would go live — including the `draft: false` flip. Without that, a change
+ * to the flip logic would silently invalidate (or fail to invalidate) approvals.
+ */
+export function publishedBytes(source: string): string {
+	return applyDraftFlag(source).content;
+}
+
+/**
+ * SHA-256 of a string, hex encoded.
+ *
+ * Web Crypto rather than `node:crypto` so this works unchanged on the Cloudflare
+ * target, where the agent will eventually run.
+ */
+export async function contentHash(text: string): Promise<string> {
+	const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+	return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/**
  * Copy one approved draft into the publish directory, flipping `draft: true` to
  * `draft: false` in the frontmatter.
  */

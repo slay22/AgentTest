@@ -3,7 +3,7 @@ import { useModel, usePersistentState, useSandbox, useSkill, useTool, setProvide
 import { local } from '@flue/runtime/node';
 import { createProvider, envApiKeyAuth } from '@earendil-works/pi-ai';
 import * as openaiCompletions from '@earendil-works/pi-ai/api/openai-completions';
-import { approveDraft } from '../tools/approve-draft.ts';
+import { approveDraft, type Approval } from '../tools/approve-draft.ts';
 import { draftsRoot } from '../tools/drafts.ts';
 import { publishPost } from '../tools/publish-post.ts';
 import { verifyClaimsTool } from '../tools/verify-claims.ts';
@@ -50,14 +50,14 @@ export function BloggerAgent() {
 	useSandbox(local({}));
 
 	// Publication is gated on durable state rather than on an instruction the
-	// model could talk itself past. `publish_post` is not in the tool list at
-	// all until at least one draft has been approved, and it re-checks the
-	// specific path at call time.
-	const [approvedDrafts, setApprovedDrafts] = usePersistentState<string[]>('approvedDrafts', []);
-	const [approvalQuotes, setApprovalQuotes] = usePersistentState<Record<string, string>>(
-		'approvalQuotes',
-		{},
-	);
+	// model could talk itself past. `publish_post` is not in the tool list at all
+	// until an approval exists, the specific path must be present, and the draft's
+	// current content must still hash to what was approved.
+	//
+	// The state key changed shape (a path list became a map of path -> approval),
+	// so it is renamed rather than migrated: an old conversation simply has no
+	// approvals yet, which fails closed.
+	const [approvals, setApprovals] = usePersistentState<Record<string, Approval>>('approvals', {});
 
 	// Skills are progressively disclosed: each costs one catalog line here, and
 	// its instructions load only when the model activates it.
@@ -68,22 +68,15 @@ export function BloggerAgent() {
 	useTool(webSearch);
 	useTool(verifyClaimsTool);
 	useTool(
-		approveDraft((absDraftPath, userQuote) => {
-			setApprovedDrafts((previous) =>
-				previous.includes(absDraftPath) ? previous : [...previous, absDraftPath],
-			);
-			setApprovalQuotes((previous) => ({ ...previous, [absDraftPath]: userQuote }));
+		approveDraft((absDraftPath, approval) => {
+			setApprovals((previous) => ({ ...previous, [absDraftPath]: approval }));
 		}),
 	);
 
 	const draftsDir = draftsRoot();
-	const canPublish = approvedDrafts.length > 0;
+	const canPublish = Object.keys(approvals).length > 0;
 	if (canPublish) {
-		useTool(
-			publishPost((absDraftPath) => approvedDrafts.includes(absDraftPath), {
-				approvalFor: (absDraftPath) => approvalQuotes[absDraftPath] ?? null,
-			}),
-		);
+		useTool(publishPost((absDraftPath) => approvals[absDraftPath] ?? null));
 	}
 
 	// Keep the instructions truthful about the tool set: before any approval,

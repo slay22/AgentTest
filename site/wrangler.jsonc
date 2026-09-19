@@ -25,6 +25,6 @@
     "SITE_DESCRIPTION": "May the Stack be with you.",
     // Public origin of the deployed blog. CI reads this for its post-deploy gate,
     // so it must be the real production URL. Local dev overrides it in .dev.vars.
-    "SITE_ORIGIN": "https://agenttest-posts.leonardomgutierrez.workers.dev"
+    "SITE_ORIGIN": "https://blog.fliagutierrez.com"
   }
 }
