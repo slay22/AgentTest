@@ -36,12 +36,17 @@ function sourceLabel(url: string): string {
   }
 }
 
+function terminalPath(title: string): string {
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
 function layout(
   config: SiteConfig,
   options: { title: string; description: string; body: string; canonical?: string },
 ): string {
   const pageTitle =
     options.title === config.title ? config.title : `${options.title} — ${config.title}`;
+  const path = terminalPath(config.title);
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -50,13 +55,19 @@ function layout(
 <title>${escapeHtml(pageTitle)}</title>
 <meta name="description" content="${escapeHtml(options.description)}">
 ${options.canonical ? `<link rel="canonical" href="${escapeHtml(options.canonical)}">` : ''}
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/style.css">
 <link rel="alternate" type="application/rss+xml" title="${escapeHtml(config.title)}" href="/feed.xml">
 </head>
 <body>
 <header class="site">
+  <div class="terminal-chrome" aria-hidden="true">
+    <span class="terminal-lights"><i></i><i></i><i></i></span>
+    <span class="terminal-path">~ / sites / ${escapeHtml(path)}</span>
+    <span class="terminal-state">online</span>
+  </div>
   <div class="site-bar">
-    <a class="site-title" href="/">${escapeHtml(config.title)}</a>
+    <a class="site-title" data-text="${escapeHtml(config.title)}" href="/">${escapeHtml(config.title)}</a>
     <nav class="site-nav" aria-label="Primary navigation">
       <a href="/">Posts</a>
       <a href="/feed.xml">RSS</a>
@@ -83,6 +94,7 @@ export function indexPage(
   const heading = options.tag
     ? `Posts tagged <span class="tag">${escapeHtml(options.tag)}</span>`
     : 'Recent notes';
+  const kicker = options.tag ? 'Topic index' : 'Transmission log';
 
   const list =
     posts.length === 0
@@ -102,7 +114,7 @@ ${posts
   return layout(config, {
     title: options.tag ? `Posts tagged ${options.tag}` : config.title,
     description: config.description,
-    body: `<h1>${heading}</h1>\n${list}\n`,
+    body: `<p class="section-kicker">${kicker}</p>\n<h1>${heading}</h1>\n${list}\n`,
   });
 }
 
