@@ -12,9 +12,15 @@ the write path.
 | | |
 | --- | --- |
 | Worker | `agenttest-posts` |
-| URL | https://agenttest-posts.leonardomgutierrez.workers.dev |
+| URL | **https://blog.fliagutierrez.com** |
+| Also served at | https://agenttest-posts.leonardomgutierrez.workers.dev |
 | D1 database | `agenttest-posts` (`64e4d1fc-0c9d-4feb-b7f2-fa06248ad3e5`) |
 | Publishing | **disabled** — no write surface, as intended |
+
+`SITE_ORIGIN` is the custom domain, which is what canonical links, `/sitemap.xml` and
+`/robots.txt` are built from. Both hostnames serve the same Worker, so pointing `SITE_ORIGIN`
+at the `workers.dev` host would publish a second, competing origin — which is exactly what
+happened before this was set, and why search engines were being offered two identical sites.
 
 The Worker name, the D1 `database_id` and `SITE_ORIGIN` are committed on purpose: the first two
 are identifiers rather than credentials, and CI needs all three to deploy. The Cloudflare
@@ -31,20 +37,8 @@ To redeploy by hand rather than through CI:
 npm run deploy
 ```
 
-### A custom domain would be better than the workers.dev host
-
-`SITE_ORIGIN` currently points at the `*.workers.dev` host, which is public by nature once the
-blog is public. If you would rather not expose an account-prefixed hostname on a public site —
-and for a blog, a real domain is better for canonical URLs and SEO anyway — add a custom domain
-to the Worker and update `SITE_ORIGIN` to match:
-
-```sh
-npx wrangler domains add blog.example.com
-```
-
-Then update `SITE_ORIGIN` in `wrangler.jsonc` (it drives canonical links, `/sitemap.xml` and
-`/robots.txt`) and redeploy. No code change needed.
-
+CI deploys too, on every push to `main`, and **fails** if `CLOUDFLARE_API_TOKEN` is missing
+rather than skipping quietly — a green deploy job that deployed nothing is worse than a red one.
 ## Why a Worker and not Pages
 
 Cloudflare's own [compatibility matrix](https://developers.cloudflare.com/workers/static-assets/migration-guides/migrate-from-pages/)
