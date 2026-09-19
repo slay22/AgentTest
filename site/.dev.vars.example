@@ -4,7 +4,7 @@
 # `.dev.vars` overrides `vars` from wrangler.jsonc during local dev, which is how
 # SITE_ORIGIN is localhost here while production uses the deployed URL.
 
-# Shared secret presented when publishing locally (used by `npm run seed`).
+# Shared secret presented when publishing or saving drafts locally.
 # Generate one with: openssl rand -hex 32
 PUBLISH_TOKEN=replace-me
 
@@ -15,5 +15,18 @@ PUBLISH_TOKEN=replace-me
 # Local dev wants it on. PRODUCTION MUST LEAVE IT UNSET: the blog is public, so
 # production should expose no write surface at all. CI asserts this.
 PUBLISH_ENABLED=true
+
+# Draft previews. Off unless DRAFTS_ENABLED is exactly "true".
+#
+# DRAFTS_TRUST_ACCESS says a Cloudflare Access application covers /drafts*; it is
+# the only mode where previews are openable in a browser, because a bearer token
+# cannot be sent from an address bar. Locally there is no Access, so leave it
+# unset and use the token — reading a preview from the terminal:
+#   curl -H "authorization: Bearer $PUBLISH_TOKEN" localhost:8787/drafts
+#
+# PRODUCTION: set DRAFTS_TRUST_ACCESS only AFTER verifying that an unauthenticated
+# request to /drafts returns 302. Setting it first would make drafts public.
+DRAFTS_ENABLED=true
+DRAFTS_TRUST_ACCESS=false
 
 SITE_ORIGIN=http://127.0.0.1:8787

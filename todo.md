@@ -239,6 +239,11 @@ Done: `publish_post` now pushes to the live blog's D1 over the REST API, so a po
 published locally appears on the site without a manual seed. What remains is moving the
 agent itself onto Cloudflare.
 
+**Update — the draft preview is built.** The site now has `/drafts`, `/drafts/:slug` and
+`POST /api/drafts`, backed by a second D1 database and guarded by `draftAccess` (off by default;
+Access mode only when explicitly named). See `site/README.md` → "Draft previews". What remains
+below is the agent side: where its *working* drafts live.
+
 - **Drafts need durable storage, and the obvious answer turns out to be gated.**
   `useSandbox(local({}))` has no counterpart on Workers. Cloudflare Computer would be the
   drop-in — it keeps Flue's `read`/`write`/`edit`/`bash`/`grep`/`glob` tools, so the drafts
@@ -253,13 +258,24 @@ agent itself onto Cloudflare.
   Cloudflare Sandbox is out too: Containers are Workers Paid only, with included usage starting
   at **$5/month** and `N/A` on Free.
 
-  **Recommended instead: a custom Flue sandbox adapter over R2.** R2 is a key-to-blob store, which
-  maps directly onto files, so implementing Flue's `Sandbox` interface gives the agent its
-  `drafts/<slug>.md` paths and its `read`/`write`/`edit` tools back with no prompt or skill
-  changes. R2's free tier (10 GB, 1M Class A and 10M Class B operations per month) is far beyond
-  what a blog needs, and it needs no beta access and no paid plan. The trade-off is that
-  `exec` is not implementable this way, so the `bash` tool is likely unavailable — acceptable,
-  since drafting uses read/write/edit, not shell.
+  An R2-backed custom sandbox adapter was the next idea, and it is **also not as cheap as it
+  looked**: Flue's `Sandbox` interface requires `exec(command)`, so an R2 adapter has to supply a
+  shell, not just file operations. R2 maps cleanly onto `readFile`/`writeFile`/`readdir`, but not
+  onto `exec`.
+
+  **The better answer is probably no sandbox at all.** An agent gets a sandbox only because it
+  calls `useSandbox`; without one, Flue simply omits the file and shell tools. If drafts live in
+  D1 and the agent gets purpose-built `write_draft` / `read_draft` / `list_drafts` tools, then:
+  - nothing needs `exec`, so no shell has to be implemented or borrowed;
+  - the storage is D1, which is already free and needs no beta access and no containers;
+  - the draft the agent edits is the same row the preview renders, so there is no push step and
+    no chance of drift;
+  - the cost is losing `bash`/`grep`/`glob`, which the drafting workflow does not use — drafting
+    is read, write, edit, which the purpose-built tools cover.
+
+  The trade-off to weigh: it changes the agent's interface, so the skills and the prompt that
+  talk about `drafts/<slug>.md` paths need updating, and `publish_post` reads a row instead of a
+  file. That is a real edit, but a smaller and more testable one than a shell emulation.
 - **Drafts belong in a second D1 database**, bound only by the agent, so the public Worker
   physically cannot read unreviewed work.
 - Flue's Cloudflare target needs `vite.config.ts` with `flue()` + `@cloudflare/vite-plugin`,
