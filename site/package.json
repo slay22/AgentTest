@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "node scripts/write-version.mjs && wrangler deploy",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.scripts.json",
     "test": "vitest run",
     "types": "wrangler types --include-runtime=false",
     "db:migrate:local": "wrangler d1 migrations apply agenttest-posts --local",
@@ -16,6 +16,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260814.1",
+    "@types/node": "^22.10.10",
     "typescript": "^5.9.2",
     "vite": "^7.3.6",
     "vitest": "^3.2.4",

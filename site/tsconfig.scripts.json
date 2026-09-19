@@ -1,0 +1,15 @@
+{
+  // Tooling (scripts/, tests/) runs on Node; the Worker does not — it carries no
+  // nodejs_compat flag. A second config keeps `src/` typechecked without Node
+  // types, so a `node:` import in Worker code fails typecheck rather than failing
+  // at runtime.
+  //
+  // This does NOT guard against `process` or `Buffer`: @cloudflare/workers-types
+  // declares both as `any`, so no tsconfig arrangement rejects them. Treat that as
+  // a known gap, not as protection.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "@cloudflare/workers-types"]
+  },
+  "include": ["scripts/**/*.ts", "tests/**/*.ts"]
+}
