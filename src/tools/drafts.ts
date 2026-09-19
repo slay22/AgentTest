@@ -1,5 +1,6 @@
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { basename, join, resolve, sep } from 'node:path';
+import { parseDocument } from 'yaml';
 
 // Filesystem helpers shared by the approve/publish tools. Kept out of the tool
 // definitions so the path rules live in exactly one place: both tools must
@@ -67,27 +68,75 @@ export async function listDrafts(): Promise<string> {
 export type PublishResult = {
 	destination: string;
 	replaced: boolean;
-	frontmatterUpdated: boolean;
+	/** What happened to the frontmatter's `draft` flag. See `applyDraftFlag`. */
+	draftFlag: DraftFlagOutcome;
 };
 
 /**
+ * What happened when we looked for a `draft` flag to flip.
+ *
+ * This is an outcome rather than a boolean on purpose. The previous
+ * implementation used a regex that silently did nothing on any frontmatter shape
+ * it did not match — `draft: "true"`, `draft: True`, `draft: yes`, `draft: true #
+ * comment`, and more — so the post published still marked as a draft while the
+ * agent reported success. An explicit outcome makes "we could not tell"
+ * unrepresentable.
+ */
+export type DraftFlagOutcome =
+	| 'flipped'
+	| 'already-published'
+	| 'no-draft-field'
+	| 'no-frontmatter';
+
+// The delimiter scan stays a regex: a line containing exactly `---` at column 0
+// genuinely ends the block, because a block scalar's content is indented. Parsing
+// the block itself is the part that must not be done by regex.
+const FRONTMATTER = /^(---\r?\n)([\s\S]*?)(\r?\n---)(\r?\n|$)/;
+
+/**
+ * Set `draft: false` in a markdown document's frontmatter.
+ *
+ * Uses a real YAML parser, which preserves comments, key order, block scalars and
+ * value types. It deliberately does not reformat the frontmatter — a flip should
+ * change one value, not rewrite the author's file.
+ *
+ * Throws on frontmatter that is not valid YAML, rather than publishing something a
+ * static site will then fail to parse.
+ */
+export function applyDraftFlag(source: string): {
+	content: string;
+	outcome: DraftFlagOutcome;
+} {
+	const match = FRONTMATTER.exec(source);
+	if (!match) return { content: source, outcome: 'no-frontmatter' };
+
+	const document = parseDocument(match[2]);
+	if (document.errors.length > 0) {
+		throw new Error(
+			`Frontmatter is not valid YAML, so the draft flag cannot be set: ${document.errors[0].message}`,
+		);
+	}
+
+	if (!document.has('draft')) return { content: source, outcome: 'no-draft-field' };
+	if (document.get('draft') === false) {
+		return { content: source, outcome: 'already-published' };
+	}
+
+	document.set('draft', false);
+	return {
+		content: `---\n${String(document)}---\n${source.slice(match[0].length)}`,
+		outcome: 'flipped',
+	};
+}
+
+/**
  * Copy one approved draft into the publish directory, flipping `draft: true` to
- * `draft: false` in the frontmatter if it is present.
+ * `draft: false` in the frontmatter.
  */
 export async function publishDraft(absDraftPath: string): Promise<PublishResult> {
 	const destination = join(publishRoot(), basename(absDraftPath));
 	const source = await readFile(absDraftPath, 'utf8');
-
-	let content = source;
-	let frontmatterUpdated = false;
-	const block = /^(---\r?\n)([\s\S]*?)(\r?\n---)/.exec(source);
-	if (block) {
-		const flipped = block[2].replace(/^draft:\s*true\s*$/m, 'draft: false');
-		if (flipped !== block[2]) {
-			content = source.slice(0, block.index) + block[1] + flipped + block[3] + source.slice(block.index + block[0].length);
-			frontmatterUpdated = true;
-		}
-	}
+	const { content, outcome } = applyDraftFlag(source);
 
 	let replaced = false;
 	try {
@@ -99,5 +148,5 @@ export async function publishDraft(absDraftPath: string): Promise<PublishResult>
 
 	await mkdir(publishRoot(), { recursive: true });
 	await writeFile(destination, content, 'utf8');
-	return { destination, replaced, frontmatterUpdated };
+	return { destination, replaced, draftFlag: outcome };
 }

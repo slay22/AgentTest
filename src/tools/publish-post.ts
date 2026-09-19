@@ -13,7 +13,7 @@ export function publishPost(isApproved: (absDraftPath: string) => boolean) {
 	return defineTool({
 		name: 'publish_post',
 		description:
-			'Copy one approved draft into the blog\'s publish directory. Call this immediately after approve_draft, with the same draftPath. If the result says the draft is not approved, the user has not approved it — ask them, and do not retry on your own. Input: draftPath (e.g. "drafts/my-post.md").',
+			'Copy one approved draft into the blog\'s publish directory, setting its frontmatter `draft` flag to false. Call this immediately after approve_draft, with the same draftPath. If the result says the draft is not approved, the user has not approved it — ask them, and do not retry on your own. Report the draftFlag outcome to the user accurately: only "flipped" means a draft flag was actually changed. Input: draftPath (e.g. "drafts/my-post.md").',
 		input: v.object({
 			draftPath: v.string(),
 		}),
@@ -35,6 +35,14 @@ export function publishPost(isApproved: (absDraftPath: string) => boolean) {
 				output: {
 					published: true,
 					...result,
+					draftFlagNote:
+						result.draftFlag === 'flipped'
+							? 'Frontmatter updated: draft is now false.'
+							: result.draftFlag === 'already-published'
+								? 'Frontmatter already said draft: false.'
+								: result.draftFlag === 'no-draft-field'
+									? 'The frontmatter has no draft field, so nothing was flipped. If the site needs one, tell the user to add it.'
+									: 'The file has no frontmatter block, so there was no draft flag to flip.',
 				},
 			};
 		},

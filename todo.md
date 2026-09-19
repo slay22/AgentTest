@@ -10,26 +10,35 @@ so a future session can pick an item up without re-deriving it.
 
 Not ideas. These are things that are wrong now.
 
-### 1. `publish_post` flips the draft flag with a regex
+### 1. ~~`publish_post` flips the draft flag with a regex~~ — FIXED
 
-`src/tools/drafts.ts:83-88` parses frontmatter with `/^(---\r?\n)([\s\S]*?)(\r?\n---)/` and
-flips `draft: true` with `/^draft:\s*true\s*$/m`. It is a regex impersonating a YAML parser.
+`src/tools/drafts.ts` parsed frontmatter with `/^(---\r?\n)([\s\S]*?)(\r?\n---)/` and flipped
+`draft: true` with `/^draft:\s*true\s*$/m` — a regex impersonating a YAML parser. Measured
+against realistic variants, **6 of 11 silently no-op'd**: the post published with `draft: true`
+still in it while the agent reported success.
 
-Measured against realistic variants, **6 of 11 silently no-op** — `frontmatterUpdated: false`
-while the post publishes with `draft: true` still in it, and the agent reports success:
-
-| Frontmatter | Flipped? |
+| Frontmatter | Old behaviour |
 | --- | --- |
-| `draft: true` | yes |
-| `draft: "true"` / `'true'` | **no** |
-| `draft: True` | **no** |
-| `draft: yes` (YAML 1.1) | **no** |
-| `draft: true # comment` | **no** |
-| nested `meta:\n  draft: true` | **no** |
-| `meta: {draft: true}` | **no** |
+| `draft: true` | flipped |
+| `draft: "true"` / `'true'` | **silent no-op** |
+| `draft: True` | **silent no-op** |
+| `draft: yes` (YAML 1.1) | **silent no-op** |
+| `draft: true # comment` | **silent no-op** |
+| nested `meta:\n  draft: true` | **silent no-op** |
+| `meta: {draft: true}` | **silent no-op** |
 
-Fix: use a real YAML library. This is the one spot in the project where reaching for AI would
-be the wrong instinct — it is deterministic parsing.
+**Fixed** by parsing with the `yaml` package's `Document` API, which preserves comments, key
+order, block scalars and value types — it changes one value rather than rewriting the author's
+file. `js-yaml` was rejected: it coerces `2026-09-19` to a `Date`, so re-serialising would have
+corrupted the date field.
+
+The second half of the fix matters as much as the first: the result is now an explicit outcome
+(`flipped` | `already-published` | `no-draft-field` | `no-frontmatter`) instead of a boolean, and
+invalid YAML throws rather than publishing something a static site cannot parse. A silent no-op
+is no longer representable. 27 regression checks in `tests/drafts.check.ts`.
+
+Worth noting as a pattern: this is the one place in the project where reaching for AI would have
+been the wrong instinct. It is deterministic parsing.
 
 ### 2. `posts/local-llms.md` has no frontmatter
 
