@@ -7,6 +7,7 @@ import {
   listTags,
   upsertPost,
 } from './repository.ts';
+import { draftStatus, registerDraftRoutes } from './drafts.ts';
 import { createRouter, type RouteContext } from './router.ts';
 import { parsePublishPost } from './validation.ts';
 import { VERSION } from './version.ts';
@@ -93,7 +94,14 @@ router.get('/sitemap.xml', async ({ env }: RouteContext) => {
 
 // Also the deploy gate: the version proves which build is live.
 router.get('/api/health', async ({ env }: RouteContext) =>
-  Response.json({ ok: true, version: VERSION, posts: await countPosts(env.DB) }),
+  Response.json({
+    ok: true,
+    version: VERSION,
+    posts: await countPosts(env.DB),
+    // Reported so the post-deploy gate can assert the draft surface is not public.
+    // No draft content, and no draft count when drafts are switched off.
+    drafts: await draftStatus(env),
+  }),
 );
 
 router.get('/api/tags', async ({ env }: RouteContext) =>
@@ -157,6 +165,10 @@ router.delete('/api/posts/:slug', async ({ request, env, params }: RouteContext)
     ? Response.json({ deleted: true })
     : Response.json({ error: 'not found' }, { status: 404 });
 });
+
+// Draft routes live in their own module, which is the only place the DRAFTS
+// binding is read.
+registerDraftRoutes(router);
 
 function authorized(header: string | null, expected: string | undefined): boolean {
   // No token configured means refuse, not allow: a misconfigured deployment must

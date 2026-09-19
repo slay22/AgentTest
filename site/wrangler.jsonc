@@ -18,6 +18,16 @@
       "database_name": "agenttest-posts",
       "database_id": "64e4d1fc-0c9d-4feb-b7f2-fa06248ad3e5",
       "migrations_dir": "migrations"
+    },
+    {
+      // Drafts live in their own database, not a status column on `posts`. The
+      // public routes are only ever handed the posts binding, so a bug there
+      // cannot reach unpublished work — the separation is structural rather than
+      // a WHERE clause someone has to remember.
+      "binding": "DRAFTS",
+      "database_name": "agenttest-drafts",
+      "database_id": "2a84b4cf-90bd-4b07-9ef0-ff3b9f038fbe",
+      "migrations_dir": "migrations-drafts"
     }
   ],
   "vars": {

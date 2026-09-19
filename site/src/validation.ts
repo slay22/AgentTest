@@ -48,3 +48,32 @@ export function parsePublishPost(payload: unknown): Parsed<PublishPostInput> {
     .join('; ');
   return { ok: false, error: details };
 }
+
+// Draft input is deliberately looser than a publish payload: a draft is working
+// material, so it may be missing a description or a date, and it carries the
+// content hash the approval gate will later re-check.
+export const draftInputSchema = z.object({
+  slug,
+  title: z.string().min(1, 'is required'),
+  description: z.string().default(''),
+  body_md: z.string().min(1, 'is required'),
+  tags: z.array(tag).default([]),
+  content_hash: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/, 'must be a lowercase hex SHA-256')
+    .optional(),
+});
+
+export type DraftInput = z.infer<typeof draftInputSchema>;
+
+export function parseDraftInput(payload: unknown): Parsed<DraftInput> {
+  const result = draftInputSchema.safeParse(payload);
+  if (result.success) return { ok: true, value: result.data };
+  const details = result.error.issues
+    .map((issue) => {
+      const path = issue.path.join('.');
+      return path ? `${path} ${issue.message}` : issue.message;
+    })
+    .join('; ');
+  return { ok: false, error: details };
+}

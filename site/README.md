@@ -14,8 +14,10 @@ the write path.
 | Worker | `agenttest-posts` |
 | URL | **https://blog.fliagutierrez.com** |
 | Also served at | https://agenttest-posts.leonardomgutierrez.workers.dev |
-| D1 database | `agenttest-posts` (`64e4d1fc-0c9d-4feb-b7f2-fa06248ad3e5`) |
+| D1 (posts) | `agenttest-posts` (`64e4d1fc-0c9d-4feb-b7f2-fa06248ad3e5`) |
+| D1 (drafts) | `agenttest-drafts` (`2a84b4cf-90bd-4b07-9ef0-ff3b9f038fbe`) |
 | Publishing | **disabled** — no write surface, as intended |
+| Draft previews | **off** — `DRAFTS_ENABLED` unset, so nothing is served |
 
 `SITE_ORIGIN` is the custom domain, which is what canonical links, `/sitemap.xml` and
 `/robots.txt` are built from. Both hostnames serve the same Worker, so pointing `SITE_ORIGIN`
@@ -141,6 +143,10 @@ below for why, and for how the private agent writes posts instead.
 | `GET /api/tags` | Tag list with counts |
 | `POST /api/posts` | Publish or update one post |
 | `DELETE /api/posts/:slug` | Remove a post |
+| `GET /drafts` | Draft index — guarded, see [Draft previews](#draft-previews) |
+| `GET /drafts/:slug` | Rendered draft preview — guarded, `no-store` |
+| `POST /api/drafts` | Save or update a draft |
+| `DELETE /api/drafts/:slug` | Remove a draft |
 
 Static files (`/style.css`, `/404.html`) are served through the `ASSETS` binding.
 
@@ -225,18 +231,10 @@ What that means in practice:
 This is stronger than a token on a public endpoint: there is nothing to attack because there is
 nothing listening.
 
-### Drafts should live in a different database
+### Drafts live in a different database
 
-The private/public split should extend to storage. The public Worker holds a binding to the
-posts database; if drafts lived in the same database, that binding *could* read unreviewed
-work even with no route exposing it.
-
-Putting drafts in a second D1 database — bound only by the agent — makes the separation
-structural rather than a matter of route discipline: **the public Worker physically cannot read
-a draft.** D1 allows 10 databases on the free plan, so this costs nothing.
-
-Publishing then becomes a copy with rendering: read the draft, render markdown, write the post
-to the public database. Which is the step the agent already owns.
+Built — see [Draft previews](#draft-previews) for the implementation and how to turn the
+surfaces on.
 
 ## Continuous integration
 
@@ -304,6 +302,74 @@ skips the guard — all of which would quietly open a public write endpoint on a
 Both jobs pin **22.19**. That is a floor, not a preference: it is the first release with
 TypeScript type-stripping on by default, which the agent job's `node
 tests/verify-claims.check.ts` depends on, and it is also Flue's minimum supported version.
+
+## Draft previews
+
+The agent can save a draft to the site and hand you a URL, so you read the rendered post in a
+browser instead of markdown in a chat window:
+
+```
+Telegram:  "drafted it → https://blog.fliagutierrez.com/drafts/local-llms"
+   ↓ you open it, read it rendered
+Telegram:  "tighten the second section"
+   ↓ agent saves the draft again, same URL
+Telegram:  "postable"   → publish → the public URL
+```
+
+### Drafts are a separate database
+
+`agenttest-drafts`, bound as `DRAFTS`, is a different database from the posts one. That is
+deliberate: `src/drafts.ts` is the only module that reads the `DRAFTS` binding, and the public
+routes are written against `env.DB`, so a mistake in a public handler cannot reach unpublished
+work. A `status` column on `posts` would have made the same guarantee rest on a `WHERE` clause
+someone has to remember.
+
+### Three access modes, decided in one place
+
+`draftAccess()` in `src/drafts.ts` is the single decision point:
+
+| Mode | When | Effect |
+| --- | --- | --- |
+| `off` | `DRAFTS_ENABLED` is not exactly `"true"` | Nothing is served. **The default**, so deploying this changes nothing. |
+| `token` | enabled, `DRAFTS_TRUST_ACCESS` not `"true"` | Requires `Authorization: Bearer $PUBLISH_TOKEN`. Usable by the agent; **not** browsable. |
+| `access` | both flags set | Assumes a Cloudflare Access application covers `/drafts*`, which blocks unauthenticated requests at the edge before this Worker runs. **The only browsable mode.** |
+
+A bearer token cannot be sent from a browser address bar, so browsable previews require Access.
+That is why `access` is a separate, explicitly-named mode rather than the default: getting it
+wrong means drafts are public.
+
+### Turning previews on
+
+1. **Create a Cloudflare Access application** for this hostname's path. In Zero Trust →
+   Access → Applications → Add an application → Self-hosted, set the domain to
+   `blog.fliagutierrez.com` and the path to `/drafts*` — the `*` matters, because `/drafts/*`
+   alone does not cover the bare `/drafts` index. Policy: your email.
+2. **Verify Access is actually in front**, before enabling anything:
+
+   ```sh
+   curl -sI https://blog.fliagutierrez.com/drafts | head -1
+   # must be 302 to <your-team>.cloudflareaccess.com, not 401 and never 200
+   ```
+
+3. **Then** set the two secrets:
+
+   ```sh
+   printf 'true' | npx wrangler secret put DRAFTS_ENABLED
+   printf 'true' | npx wrangler secret put DRAFTS_TRUST_ACCESS
+   ```
+
+Step 2 is the one that matters. Setting `DRAFTS_TRUST_ACCESS` before the Access application
+exists would make every draft public, so the CI post-deploy gate asserts that an unauthenticated
+`GET /drafts` never returns `200` — whatever the mode — and fails the deploy if it does.
+
+`GET /api/health` reports `drafts: { mode, browsable, count }` so you can see the posture at a
+glance. No draft content, and no count at all when drafts are off.
+
+### Caching
+
+Draft pages send `Cache-Control: no-store` and `X-Robots-Tag: noindex, nofollow`. The caching
+part is not an optimisation detail: a cached preview could show you a draft the agent has
+already replaced, and you would approve text you never read.
 
 ## Content safety
 

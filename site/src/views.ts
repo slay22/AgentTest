@@ -1,5 +1,5 @@
 import { escapeHtml, readingMinutes } from './markdown.ts';
-import type { Post, PostSummary } from './repository.ts';
+import type { Draft, DraftSummary, Post, PostSummary } from './repository.ts';
 
 // HTML assembled as strings. No template engine: building a few hundred bytes of
 // markup is the cheapest thing a Worker can do, which matters under the free
@@ -273,4 +273,80 @@ export function sitemap(config: SiteConfig, posts: PostSummary[]): string {
 ${urls}
 </urlset>
 `;
+}
+
+// ---------------------------------------------------------------------------
+// Draft previews
+//
+// These pages are built from the drafts database and are never public: the route
+// requires Cloudflare Access in front, or the publish token. They must also never
+// be cached — a reviewer looking at a stale draft could approve text that the
+// agent has already replaced.
+// ---------------------------------------------------------------------------
+
+function draftBanner(draft: Draft): string {
+  const approval = draft.approved_at
+    ? `<span class="draft-badge draft-badge--approved">approved ${escapeHtml(formatDate(draft.approved_at))}</span>`
+    : '<span class="draft-badge">not approved</span>';
+  const quote = draft.approved_quote
+    ? `<p class="draft-quote">Approved with: “${escapeHtml(draft.approved_quote)}”</p>`
+    : '';
+  return `<div class="draft-banner">
+  <span class="draft-badge draft-badge--draft">draft</span>
+  ${approval}
+  <span class="draft-hash">${draft.content_hash ? `sha256 ${escapeHtml(draft.content_hash.slice(0, 12))}` : 'not hashed yet'}</span>
+</div>
+${quote}`;
+}
+
+export function draftIndexPage(config: SiteConfig, drafts: DraftSummary[]): string {
+  const list =
+    drafts.length === 0
+      ? '<p class="empty">No drafts. The agent has not written anything yet.</p>'
+      : `<ul class="post-list">
+${drafts
+  .map(
+    (draft) => `  <li>
+    <a class="post-link" href="/drafts/${encodeURIComponent(draft.slug)}">${escapeHtml(draft.title)}</a>
+    <p class="post-description">${escapeHtml(draft.description)}</p>
+    <p class="post-meta"><time datetime="${escapeHtml(draft.updated_at)}">${formatDate(draft.updated_at)}</time> · ${readingMinutes(draft.word_count)} min read · <span class="draft-badge${draft.approved ? ' draft-badge--approved' : ''}">${draft.approved ? 'approved' : 'draft'}</span></p>
+  </li>`,
+  )
+  .join('\n')}
+</ul>`;
+
+  return layout(config, {
+    title: 'Drafts',
+    description: 'Unpublished drafts awaiting review.',
+    body: `<h1>Drafts</h1>
+<p class="draft-note">Private. These pages are not published and are not indexable.</p>
+${list}
+`,
+  });
+}
+
+export function draftPage(config: SiteConfig, draft: Draft): string {
+  const body = `<article>
+  ${draftBanner(draft)}
+  <p class="section-kicker">Draft preview</p>
+  <h1>${escapeHtml(draft.title)}</h1>
+  <p class="article-dek">${escapeHtml(draft.description)}</p>
+  <p class="post-meta">
+    <span>edited ${formatDate(draft.updated_at)}</span>
+    <span aria-hidden="true">·</span>
+    <span>${readingMinutes(draft.word_count)} min read</span>
+    ${draft.tags.length ? `<span aria-hidden="true">·</span><span class="tag-list">${tagLinks(draft.tags)}</span>` : ''}
+  </p>
+  <div class="prose">
+${draft.body_html}
+  </div>
+</article>
+<p class="back"><a href="/drafts">← All drafts</a></p>
+`;
+
+  return layout(config, {
+    title: `Draft: ${draft.title}`,
+    description: draft.description,
+    body,
+  });
 }

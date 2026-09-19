@@ -679,3 +679,41 @@ footer.site a { color: var(--fg); }
 	.site-title:hover::after,
 	.site-title:focus-visible::after { animation: none; }
 }
+
+/* Draft preview chrome. Drafts are private and must never be mistaken for a
+   published post, so the banner is deliberate and loud. */
+.draft-banner {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	align-items: center;
+	margin-bottom: 0.75rem;
+	font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+	font-size: 0.75rem;
+}
+.draft-badge {
+	display: inline-block;
+	padding: 0.1rem 0.5rem;
+	border: 1px solid currentColor;
+	border-radius: 999px;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	opacity: 0.75;
+}
+.draft-badge--draft {
+	border-style: dashed;
+	opacity: 1;
+}
+.draft-badge--approved {
+	border-style: solid;
+	opacity: 1;
+}
+.draft-hash { opacity: 0.5; }
+.draft-quote {
+	margin: 0 0 1.5rem;
+	padding-left: 0.75rem;
+	border-left: 2px solid currentColor;
+	opacity: 0.7;
+	font-style: italic;
+}
+.draft-note { opacity: 0.7; font-size: 0.9rem; }

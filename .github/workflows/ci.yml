@@ -153,6 +153,19 @@ jobs:
             -X POST "$ORIGIN/api/posts" -H 'content-type: application/json' -d '{}')
           test "$code" = "403" || fail "POST /api/posts returned $code, expected 403 — production should have no write surface (leave PUBLISH_ENABLED unset)"
 
+          # Drafts are the one surface where a misconfiguration publishes private
+          # material. Whatever protection mode the deployment reports, an
+          # unauthenticated request must never get a 200: off -> 403, token -> 401,
+          # Access -> 302 to the login. This catches a DRAFTS_TRUST_ACCESS set
+          # without the Access application actually existing.
+          drafts_mode=$(echo "$health" | sed -n 's/.*"drafts":{"mode":"\([a-z]*\)".*/\1/p')
+          echo "drafts mode: ${drafts_mode:-unknown}"
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$ORIGIN/drafts")
+          if [ "$code" = "200" ]; then
+            fail "unauthenticated GET /drafts returned 200 (mode=$drafts_mode) — draft previews are PUBLIC"
+          fi
+          echo "drafts are not public (HTTP $code, mode=${drafts_mode:-unknown})"
+
           echo "Post-deploy gate passed."
 
       # A deploy job that goes green without deploying anything is worse than one that

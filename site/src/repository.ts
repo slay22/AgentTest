@@ -166,3 +166,162 @@ function toSummary(row: Row): PostSummary {
     tags,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Drafts
+//
+// A separate database and a separate module: nothing here is reachable through
+// the public routes, which are only ever handed the posts binding.
+// ---------------------------------------------------------------------------
+
+export interface Draft {
+  slug: string;
+  title: string;
+  description: string;
+  body_md: string;
+  body_html: string;
+  word_count: number;
+  tags: string[];
+  content_hash: string | null;
+  approved_quote: string | null;
+  approved_at: string | null;
+  updated_at: string;
+}
+
+export interface DraftSummary {
+  slug: string;
+  title: string;
+  description: string;
+  word_count: number;
+  updated_at: string;
+  approved: boolean;
+}
+
+const DRAFT_SUMMARY_COLUMNS = `
+  d.slug, d.title, d.description, d.word_count, d.updated_at,
+  (d.approved_at IS NOT NULL) AS approved,
+  COALESCE(
+    (SELECT json_group_array(tag) FROM draft_tags WHERE slug = d.slug ORDER BY tag),
+    '[]'
+  ) AS tags
+`;
+
+export type DraftRow = Record<string, unknown>;
+
+export async function listDrafts(db: D1Database): Promise<DraftSummary[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT ${DRAFT_SUMMARY_COLUMNS} FROM drafts d ORDER BY d.updated_at DESC LIMIT 100`,
+    )
+    .all<DraftRow>();
+  return results.map((row) => ({
+    slug: String(row.slug),
+    title: String(row.title),
+    description: String(row.description),
+    word_count: Number(row.word_count ?? 0),
+    updated_at: String(row.updated_at),
+    approved: Number(row.approved ?? 0) === 1,
+  }));
+}
+
+export async function getDraft(db: D1Database, slug: string): Promise<Draft | null> {
+  const row = await db
+    .prepare(
+      `SELECT d.body_md, d.body_html, d.content_hash, d.approved_quote, d.approved_at,
+              ${DRAFT_SUMMARY_COLUMNS}
+       FROM drafts d WHERE d.slug = ?`,
+    )
+    .bind(slug)
+    .first<DraftRow>();
+  if (!row) return null;
+  return {
+    slug: String(row.slug),
+    title: String(row.title),
+    description: String(row.description),
+    body_md: String(row.body_md ?? ''),
+    body_html: String(row.body_html ?? ''),
+    word_count: Number(row.word_count ?? 0),
+    tags: parseTagsJson(row.tags),
+    content_hash: row.content_hash ? String(row.content_hash) : null,
+    approved_quote: row.approved_quote ? String(row.approved_quote) : null,
+    approved_at: row.approved_at ? String(row.approved_at) : null,
+    updated_at: String(row.updated_at),
+  };
+}
+
+export interface UpsertDraft {
+  slug: string;
+  title: string;
+  description: string;
+  body_md: string;
+  body_html: string;
+  word_count: number;
+  tags: string[];
+  content_hash?: string | null;
+}
+
+/**
+ * Insert or replace one draft.
+ *
+ * `approved_quote` and `approved_at` are cleared whenever the content hash
+ * changes: a revision invalidates the approval, and the preview should say so
+ * rather than showing a stale "approved" badge.
+ */
+export async function upsertDraft(db: D1Database, draft: UpsertDraft): Promise<void> {
+  const statements = [
+    db
+      .prepare(
+        `INSERT INTO drafts
+           (slug, title, description, body_md, body_html, word_count, content_hash, approved_quote, approved_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+         ON CONFLICT(slug) DO UPDATE SET
+           title = excluded.title,
+           description = excluded.description,
+           body_md = excluded.body_md,
+           body_html = excluded.body_html,
+           word_count = excluded.word_count,
+           content_hash = excluded.content_hash,
+           updated_at = datetime('now'),
+           approved_quote = CASE
+             WHEN drafts.content_hash IS excluded.content_hash THEN drafts.approved_quote
+             ELSE NULL
+           END,
+           approved_at = CASE
+             WHEN drafts.content_hash IS excluded.content_hash THEN drafts.approved_at
+             ELSE NULL
+           END`,
+      )
+      .bind(
+        draft.slug,
+        draft.title,
+        draft.description,
+        draft.body_md,
+        draft.body_html,
+        draft.word_count,
+        draft.content_hash ?? null,
+      ),
+    db.prepare('DELETE FROM draft_tags WHERE slug = ?').bind(draft.slug),
+    ...draft.tags.map((tag) =>
+      db.prepare('INSERT OR IGNORE INTO draft_tags (slug, tag) VALUES (?, ?)').bind(draft.slug, tag),
+    ),
+  ];
+  await db.batch(statements);
+}
+
+export async function deleteDraft(db: D1Database, slug: string): Promise<boolean> {
+  const result = await db.prepare('DELETE FROM drafts WHERE slug = ?').bind(slug).run();
+  return (result.meta.changes ?? 0) > 0;
+}
+
+export async function countDrafts(db: D1Database): Promise<number> {
+  const row = await db.prepare('SELECT COUNT(*) AS count FROM drafts').first<{ count: number }>();
+  return row?.count ?? 0;
+}
+
+function parseTagsJson(value: unknown): string[] {
+  try {
+    return JSON.parse(String(value ?? '[]')) as string[];
+  } catch {
+    return [];
+  }
+}

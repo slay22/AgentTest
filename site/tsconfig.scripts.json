@@ -11,5 +11,8 @@
   "compilerOptions": {
     "types": ["node", "@cloudflare/workers-types"]
   },
-  "include": ["scripts/**/*.ts", "tests/**/*.ts"]
+  // src/**/*.d.ts is required: scripts and tests import from src, and the ambient
+  // `Env` interface lives in src/env.d.ts. Without it, every file that mentions a
+  // binding fails to typecheck under this config alone.
+  "include": ["scripts/**/*.ts", "tests/**/*.ts", "src/**/*.d.ts"]
 }

@@ -5,6 +5,7 @@
 // file carries the half Wrangler cannot see.
 interface Env {
   DB: D1Database;
+  DRAFTS: D1Database;
   ASSETS: Fetcher;
   SITE_TITLE: string;
   SITE_DESCRIPTION: string;
@@ -16,4 +17,11 @@ interface Env {
   // See README "Publishing" for why this is a token and not Cloudflare Access.
   PUBLISH_ENABLED?: string;
   PUBLISH_TOKEN?: string;
+
+  // Draft previews. Off unless DRAFTS_ENABLED is exactly "true", so a fresh
+  // deployment serves nothing until someone opts in. DRAFTS_TRUST_ACCESS says a
+  // Cloudflare Access application covers /drafts*, which is the only mode where
+  // previews are openable in a browser.
+  DRAFTS_ENABLED?: string;
+  DRAFTS_TRUST_ACCESS?: string;
 }

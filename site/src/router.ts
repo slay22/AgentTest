@@ -41,8 +41,14 @@ export function createRouter(): Router {
     const url = new URL(request.url);
     const parts = url.pathname.split('/').filter(Boolean);
 
+    // HEAD is GET without a body: a HEAD request must select the same route and
+    // produce the same headers, including the draft guard. Matching it exactly
+    // meant HEAD fell through to the asset fallback and 404'd every GET route,
+    // which breaks link checkers and uptime probes. The runtime strips the body.
+    const method = request.method === 'HEAD' ? 'GET' : request.method;
+
     for (const route of routes) {
-      if (route.method !== request.method) continue;
+      if (route.method !== method) continue;
       if (route.segments.length !== parts.length) continue;
 
       const params: Record<string, string> = {};
