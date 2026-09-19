@@ -1,5 +1,15 @@
 'use agent';
-import { useModel, usePersistentState, useSandbox, useSkill, useTool, setProvider } from '@flue/runtime';
+import {
+	useInitialData,
+	useModel,
+	usePersistentState,
+	useSandbox,
+	useSkill,
+	useTool,
+	setProvider,
+} from '@flue/runtime';
+import * as v from 'valibot';
+import { postMessage, telegramInitialData } from '../channels/telegram-reply.ts';
 import { local } from '@flue/runtime/node';
 import { createProvider, envApiKeyAuth } from '@earendil-works/pi-ai';
 import * as openaiCompletions from '@earendil-works/pi-ai/api/openai-completions';
@@ -49,6 +59,12 @@ export function BloggerAgent() {
 	useModel('lemonade/Qwen3.8-27B-GGUF');
 	useSandbox(local({}));
 
+	// Present only when Telegram created this conversation. The agent is also run
+	// directly (`flue run`, no creation data), so everything Telegram-related is
+	// conditional: no data means no reply tool and no Telegram instructions.
+	const telegram = useInitialData<v.InferOutput<typeof telegramInitialData>>();
+	if (telegram) useTool(postMessage(telegram));
+
 	// Publication is gated on durable state rather than on an instruction the
 	// model could talk itself past. `publish_post` is not in the tool list at all
 	// until an approval exists, the specific path must be present, and the draft's
@@ -74,6 +90,14 @@ export function BloggerAgent() {
 	);
 
 	const draftsDir = draftsRoot();
+	// Telegram caps a message at 4096 characters, so a chat reply is a summary and a
+	// link, never the post itself. This only applies in a Telegram conversation.
+	const telegramNote = telegram
+		? `
+
+This conversation is on Telegram, so reply with post_telegram_message rather than plain text. Keep each reply short: Telegram rejects messages over 4096 characters, so never paste a draft or post into chat. Summarise what changed and link to the draft preview instead, and ask for approval in words.`
+		: '';
+
 	const canPublish = Object.keys(approvals).length > 0;
 	if (canPublish) {
 		useTool(publishPost((absDraftPath) => approvals[absDraftPath] ?? null));
@@ -105,5 +129,10 @@ Workflow:
 ${publishStep}
 5. After publishing, report three things literally as the tool returned them: the destination path, whether an existing post was replaced, and the draftFlag value (only "flipped" means the draft flag was actually changed). Also report the blog.updated field: if it is false the post did NOT reach the live site, and you must say so plainly and pass on the reason rather than implying it is live.
 
-Approval rules. Call approve_draft only when the user has said, in their own words, to publish this specific post now. A finished draft is not approval. Praise is not approval. Approving one post is never approval for another. When in doubt, ask before approving.`;
+Approval rules. Call approve_draft only when the user has said, in their own words, to publish this specific post now. A finished draft is not approval. Praise is not approval. Approving one post is never approval for another. When in doubt, ask before approving.${telegramNote}`;
 }
+
+// Declared as optional so both entry points validate: a Telegram dispatch always
+// supplies creation data and is checked against the variant, while `flue run`
+// supplies none and is accepted rather than rejected at instance creation.
+BloggerAgent.initialData = v.optional(telegramInitialData);

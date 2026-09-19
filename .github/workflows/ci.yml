@@ -46,6 +46,9 @@ jobs:
       - name: Tests (D1 push to the live blog)
         run: npm run check:remote
 
+      - name: Tests (Telegram sender allowlist)
+        run: npm run check:telegram
+
   # The public blog.
   site:
     name: site checks

@@ -194,3 +194,77 @@ src/
 - `.github/workflows/ci.yml` — CI for both projects: the agent checks run on every push, and the
   site is deployed from `main` behind a post-deploy gate.
 - `todo.md` — the backlog, including the decisions already made and why.
+
+## Talking to the agent on Telegram
+
+`src/channels/telegram.ts` adds verified Telegram webhook ingress, following the
+[Flue Telegram blueprint](https://flueframework.com/docs/ecosystem/channels/telegram/) —
+`flue add channel telegram` output, adapted. It is **push, not polling**: Telegram POSTs to
+`/channels/telegram/webhook` the moment a message arrives, and the docs are explicit that webhook
+delivery and `getUpdates` polling are mutually exclusive.
+
+```
+you send a message
+      ↓  Telegram POSTs to /channels/telegram/webhook
+@flue/telegram verifies X-Telegram-Bot-Api-Secret-Token   (before parsing)
+      ↓  allowlist check — a stranger stops here
+dispatch(BloggerAgent, { id: instanceId(chat), initialData, idempotencyKey: update_id })
+      ↓  the agent runs, and replies with post_telegram_message
+grammY → Telegram Bot API
+```
+
+One durable conversation per chat, so history survives restarts. The agent is **not** mounted over
+HTTP — registration is all `dispatch()` needs — so nothing else is exposed.
+
+### The sender allowlist is not optional
+
+A Telegram bot is publicly messageable: anyone who finds it can send messages. This agent has a
+shell on the host, so an allowlist that failed open would hand a stranger remote shell access.
+`allowedUserIds` therefore returns **nobody** when `TELEGRAM_ALLOWED_USER_IDS` is unset or empty,
+and `isAllowedSender` is checked *before* `dispatch`, so a refused sender never reaches a tool.
+
+`tests/telegram.check.ts` covers that boundary: unset, empty, whitespace-only, unlisted,
+prefix-of-a-listed id, and missing sender ids are all refused.
+
+### Setup
+
+1. Create a bot with **@BotFather**; put its token in `TELEGRAM_BOT_TOKEN`.
+2. Get your numeric user id from **@userinfobot**; put it in `TELEGRAM_ALLOWED_USER_IDS`
+   (comma-separated for more than one).
+3. Generate `TELEGRAM_WEBHOOK_SECRET_TOKEN` — letters, numbers, underscores and hyphens only,
+   and never reused across bots (Telegram does not sign request bodies).
+4. The agent must be reachable at a public HTTPS URL. Telegram POSTs to
+   `<origin>/channels/telegram/webhook`, so either deploy it or expose it with a tunnel:
+
+   ```sh
+   npm run dev            # vite dev, port 5173 — binds IPv6 [::1], so use `localhost`
+   ```
+
+5. Register the webhook **once**, from a machine holding the bot token:
+
+   ```ts
+   import { telegramApi } from './src/channels/telegram-client.ts';
+   await telegramApi().setWebhook('https://<your-origin>/channels/telegram/webhook', {
+     secret_token: process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN!,
+     allowed_updates: ['message', 'edited_message', 'callback_query'],
+   });
+   ```
+
+### Two deliberate deviations from the blueprint
+
+**Lazy clients, and the ingress split from the reply tool.** The blueprint puts
+`export const client = new Api(process.env.TELEGRAM_BOT_TOKEN!)` and
+`createTelegramChannel({ secretToken: process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN! })` in one
+module. Both validate at module load, and `BloggerAgent` imports that module — so a checkout with
+no Telegram credentials would break `flue run`, which is how the agent is developed. The client is
+now created on first use, and the agent imports `telegram-reply.ts`, which has no ingress config.
+`flue run` works with no Telegram environment at all.
+
+**A sender allowlist**, which the blueprint does not include.
+
+### Capping replies
+
+Telegram rejects messages over **4096 characters**, and a blog post is longer. The agent's
+instructions say to reply with a summary and a link to the draft preview rather than the text, and
+`post_telegram_message` refuses an oversized message with an actionable error instead of letting
+the Bot API fail opaquely.
