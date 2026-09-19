@@ -28,6 +28,14 @@ function tagLinks(tags: string[]): string {
     .join(' ');
 }
 
+function sourceLabel(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
 function layout(
   config: SiteConfig,
   options: { title: string; description: string; body: string; canonical?: string },
@@ -47,14 +55,20 @@ ${options.canonical ? `<link rel="canonical" href="${escapeHtml(options.canonica
 </head>
 <body>
 <header class="site">
-  <a class="site-title" href="/">${escapeHtml(config.title)}</a>
+  <div class="site-bar">
+    <a class="site-title" href="/">${escapeHtml(config.title)}</a>
+    <nav class="site-nav" aria-label="Primary navigation">
+      <a href="/">Posts</a>
+      <a href="/feed.xml">RSS</a>
+    </nav>
+  </div>
   <p class="site-description">${escapeHtml(config.description)}</p>
 </header>
 <main>
 ${options.body}
 </main>
 <footer class="site">
-  <p>Built with <a href="https://flueframework.com">Flue</a>, running on Cloudflare.</p>
+  <p>${escapeHtml(config.title)} · Built with <a href="https://flueframework.com">Flue</a> and running on Cloudflare.</p>
 </footer>
 </body>
 </html>
@@ -68,7 +82,7 @@ export function indexPage(
 ): string {
   const heading = options.tag
     ? `Posts tagged <span class="tag">${escapeHtml(options.tag)}</span>`
-    : 'Posts';
+    : 'Recent notes';
 
   const list =
     posts.length === 0
@@ -79,7 +93,7 @@ ${posts
     (post) => `  <li>
     <a class="post-link" href="/posts/${encodeURIComponent(post.slug)}">${escapeHtml(post.title)}</a>
     <p class="post-description">${escapeHtml(post.description)}</p>
-    <p class="post-meta"><time datetime="${escapeHtml(post.published_at)}">${formatDate(post.published_at)}</time> · ${readingMinutes(post.word_count)} min read ${post.tags.length ? `· ${tagLinks(post.tags)}` : ''}</p>
+    <p class="post-meta"><time datetime="${escapeHtml(post.published_at)}">${formatDate(post.published_at)}</time><span aria-hidden="true">·</span><span>${readingMinutes(post.word_count)} min read</span>${post.tags.length ? `<span aria-hidden="true">·</span><span class="tag-list">${tagLinks(post.tags)}</span>` : ''}</p>
   </li>`,
   )
   .join('\n')}
@@ -101,18 +115,21 @@ export function postPage(config: SiteConfig, post: Post): string {
   <ul>${post.sources
     .map(
       (url) =>
-        `<li><a href="${escapeHtml(url)}" rel="nofollow noopener">${escapeHtml(url)}</a></li>`,
+        `<li><a href="${escapeHtml(url)}" title="${escapeHtml(url)}" rel="nofollow noopener">${escapeHtml(sourceLabel(url))}</a></li>`,
     )
     .join('')}</ul>
 </section>`
     : '';
 
   const body = `<article>
+  <p class="section-kicker">Long-form note</p>
   <h1>${escapeHtml(post.title)}</h1>
+  <p class="article-dek">${escapeHtml(post.description)}</p>
   <p class="post-meta">
     <time datetime="${escapeHtml(post.published_at)}">${formatDate(post.published_at)}</time>
-    · ${readingMinutes(post.word_count)} min read
-    ${post.tags.length ? `· ${tagLinks(post.tags)}` : ''}
+    <span aria-hidden="true">·</span>
+    <span>${readingMinutes(post.word_count)} min read</span>
+    ${post.tags.length ? `<span aria-hidden="true">·</span><span class="tag-list">${tagLinks(post.tags)}</span>` : ''}
   </p>
   <div class="prose">
 ${post.body_html}
