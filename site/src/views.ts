@@ -80,6 +80,7 @@ ${options.body}
 </main>
 <footer class="site">
   <p>${escapeHtml(config.title)} · Built with <a href="https://flueframework.com">Flue</a> and running on Cloudflare.</p>
+  <p class="terminal-invite">Open console: <a href="/terminal"><code>$ ssh brave-new-code</code></a></p>
 </footer>
 </body>
 </html>
@@ -116,6 +117,67 @@ ${posts
     description: config.description,
     body: `<p class="section-kicker">${kicker}</p>\n<h1>${heading}</h1>\n${list}\n`,
   });
+}
+
+export function terminalPage(config: SiteConfig, posts: PostSummary[]): string {
+  const path = terminalPath(config.title);
+  const postList = posts.length
+    ? posts
+        .map(
+          (post, index) => `<li class="terminal-post">
+  <span class="terminal-post-number">${String(index + 1).padStart(2, '0')}</span>
+  <a data-post-link data-description="${escapeHtml(post.description)}" href="/posts/${encodeURIComponent(post.slug)}">${escapeHtml(post.title)}</a>
+  <span class="terminal-post-meta">${escapeHtml(post.tags.join(' · ') || 'untagged')}</span>
+</li>`,
+        )
+        .join('\n')
+    : '<li class="terminal-empty">No posts mounted.</li>';
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Console — ${escapeHtml(config.title)}</title>
+<meta name="description" content="Read ${escapeHtml(config.title)} through the terminal interface.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body class="terminal-page">
+<main class="terminal-app">
+  <section class="terminal-window" data-terminal aria-label="${escapeHtml(config.title)} terminal">
+    <div class="terminal-chrome" aria-hidden="true">
+      <span class="terminal-lights"><i></i><i></i><i></i></span>
+      <span class="terminal-path">~ / sites / ${escapeHtml(path)} / console</span>
+      <span class="terminal-state">connected</span>
+    </div>
+    <div class="terminal-screen">
+      <div class="terminal-output" data-terminal-output role="log" aria-live="polite">
+        <p><span class="terminal-prompt">guest@brave-new-code:~$</span> ssh brave-new-code</p>
+        <p class="terminal-success">connection established</p>
+        <p class="terminal-muted">Read-only session. Type <code>help</code> for available commands.</p>
+      </div>
+      <div class="terminal-directory">
+        <div class="terminal-directory-heading"><span>mounted: /posts</span><span>${posts.length} entr${posts.length === 1 ? 'y' : 'ies'}</span></div>
+        <ol class="terminal-post-list" data-post-list>
+${postList}
+        </ol>
+      </div>
+      <noscript><p class="terminal-noscript">JavaScript is disabled. Use the post links above or <a href="/">return to the editorial site</a>.</p></noscript>
+      <form class="terminal-form" data-terminal-form>
+        <label class="sr-only" for="terminal-command">Terminal command</label>
+        <span class="terminal-prompt" aria-hidden="true">guest@brave-new-code:~$</span>
+        <input id="terminal-command" name="command" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="terminal-help">
+      </form>
+      <p id="terminal-help" class="terminal-help">help · list · open 1 · tags · about · clear · exit</p>
+    </div>
+  </section>
+  <p class="terminal-exit"><a href="/">← Return to the editorial site</a></p>
+</main>
+<script src="/terminal.js" defer></script>
+</body>
+</html>
+`;
 }
 
 export function postPage(config: SiteConfig, post: Post): string {

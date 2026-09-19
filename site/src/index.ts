@@ -10,7 +10,15 @@ import {
 import { createRouter, type RouteContext } from './router.ts';
 import { parsePublishPost } from './validation.ts';
 import { VERSION } from './version.ts';
-import { feed, indexPage, notFoundPage, postPage, sitemap, type SiteConfig } from './views.ts';
+import {
+  feed,
+  indexPage,
+  notFoundPage,
+  postPage,
+  sitemap,
+  terminalPage,
+  type SiteConfig,
+} from './views.ts';
 
 // The Worker is the whole server: no framework, matching the receiptScanner
 // convention. Static files are served through the ASSETS binding, so the fetch
@@ -41,6 +49,11 @@ function html(body: string, status = 200): Response {
 router.get('/', async ({ env }: RouteContext) => {
   const posts = await listPosts(env.DB);
   return html(indexPage(siteConfig(env), posts));
+});
+
+router.get('/terminal', async ({ env }: RouteContext) => {
+  const posts = await listPosts(env.DB);
+  return html(terminalPage(siteConfig(env), posts));
 });
 
 router.get('/tags/:tag', async ({ env, params }: RouteContext) => {
