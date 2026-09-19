@@ -1,6 +1,9 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
+import { readFile } from 'node:fs/promises';
+import { basename } from 'node:path';
 import { publishDraft, resolveDraft } from './drafts.ts';
+import { postForRemote, pushPostToBlog } from './remote-blog.ts';
 
 /**
  * Publishes one draft, but only if `isApproved` says the user approved it.
@@ -9,7 +12,10 @@ import { publishDraft, resolveDraft } from './drafts.ts';
  * the specific path here, so a draft the user never approved cannot be
  * published even if the mount is reachable.
  */
-export function publishPost(isApproved: (absDraftPath: string) => boolean) {
+export function publishPost(
+	isApproved: (absDraftPath: string) => boolean,
+	options: { approvalFor?: (absDraftPath: string) => string | null } = {},
+) {
 	return defineTool({
 		name: 'publish_post',
 		description:
@@ -31,10 +37,32 @@ export function publishPost(isApproved: (absDraftPath: string) => boolean) {
 			}
 
 			const result = await publishDraft(abs);
+
+			// The local copy is written; now make it appear on the deployed blog.
+			// Rendering and row-building go through the same mapping the bulk seed
+			// script uses, so the two cannot produce different posts.
+			const remote = await pushPostToBlog(
+				postForRemote(basename(abs), await readFile(abs, 'utf8'), {
+					today: new Date().toISOString().slice(0, 10),
+					approved_quote: options.approvalFor?.(abs) ?? null,
+				}),
+			);
+
 			return {
 				output: {
-					published: true,
+					publishedLocally: true,
 					...result,
+					blog: remote.pushed
+						? { updated: true, url: result.destination }
+						: remote.reason === 'not-configured'
+							? {
+									updated: false,
+									reason: `The live blog was not updated: ${remote.missing.join(', ')} ${remote.missing.length === 1 ? 'is' : 'are'} not set, so this deployment has no blog configured. The post is written locally only.`,
+								}
+							: {
+									updated: false,
+									reason: `The live blog was not updated: ${remote.error}. The local copy was written; tell the user the blog update failed rather than reporting success.`,
+								},
 					draftFlagNote:
 						result.draftFlag === 'flipped'
 							? 'Frontmatter updated: draft is now false.'

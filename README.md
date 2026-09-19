@@ -120,9 +120,23 @@ See "Sensible next steps" below.
 
 ### Publishing
 
-`publish_post` copies the approved draft into `BLOG_PUBLISH_DIR`, flipping `draft: true` to
-`draft: false` in the frontmatter when present, and reports the destination, whether an
-existing post was replaced, and whether the frontmatter was updated.
+`publish_post` does two things, in order:
+
+1. **Writes the local copy** into `BLOG_PUBLISH_DIR`, setting the frontmatter's `draft` flag to
+   false via a real YAML parser. It reports the destination, whether an existing post was
+   replaced, and an explicit `draftFlag` outcome (`flipped` | `already-published` |
+   `no-draft-field` | `no-frontmatter`) so a no-op cannot be mistaken for a change.
+2. **Pushes the post to the live blog** — the deployed D1 database behind `site/` — over the
+   Cloudflare REST API, as a parameterized batch. Nothing is interpolated into SQL.
+
+The row is built by `postFromMarkdown` in `site/src/post-from-file.ts`, which the site's bulk
+seed script also uses. A post published by the agent and a post seeded by hand are therefore
+byte-identical and cannot drift.
+
+If the push cannot happen the tool still reports `publishedLocally: true`, but
+`blog.updated: false` with a reason, and the agent is instructed to say so plainly rather than
+implying the post is live. Unconfigured credentials are a normal state, not an error: a checkout
+with no Cloudflare variables publishes locally only.
 
 Both tools confine paths to the drafts directory. Anything outside it, any non-`.md` file, and
 any missing file is refused with a message listing the drafts that do exist. This matters
@@ -136,8 +150,16 @@ because the draft path is model-supplied input.
 | `TYPESAFE_API_KEY` | [TypeSafe](https://docs.typesafe.ai) System One (Jev), used by `verify_claims`. Empty counts as unset. |
 | `BLOG_PUBLISH_DIR` | Where `publish_post` copies finished posts. |
 | `BLOG_DRAFTS_DIR` | Where working drafts live. Defaults to `./drafts`. |
+| `CLOUDFLARE_ACCOUNT_ID` | Account that owns the blog's D1 database. |
+| `CLOUDFLARE_D1_DATABASE_ID` | The `agenttest-posts` database id, as in `site/wrangler.jsonc`. |
+| `CLOUDFLARE_API_TOKEN` | Token with **D1 Edit on that one database**. Needed only to push to the live blog. |
 | `LEMONADE_BASE_URL` | Local OpenAI-compatible server. Defaults to `http://localhost:13305/v1`. |
 | `LEMONADE_API_KEY` | Sentinel only — Lemonade ignores the value. |
+
+**Scope the API token narrowly.** `useSandbox(local({}))` gives the agent a shell on this
+machine, so anything in `.env` is readable by model-directed code. A token limited to D1 Edit on
+the single blog database cannot touch anything else in the account; an account-wide token could.
+Leaving the three variables unset is the safest configuration and is fully supported.
 
 ## Layout
 

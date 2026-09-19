@@ -5,12 +5,14 @@
 	"scripts": {
 		"check:types": "tsc --noEmit",
 		"check:verify-claims": "node tests/verify-claims.check.ts",
-		"check:drafts": "node tests/drafts.check.ts"
+		"check:drafts": "node tests/drafts.check.ts",
+		"check:remote": "node tests/remote-blog.check.ts"
 	},
 	"dependencies": {
 		"@earendil-works/pi-ai": "^0.83.0",
 		"@flue/runtime": "^2.0.8",
 		"@typesafe-ai/sdk": "^0.6.0",
+		"marked": "^18.0.13",
 		"valibot": "^1.5.0",
 		"yaml": "^2.9.1"
 	},

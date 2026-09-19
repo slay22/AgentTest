@@ -184,7 +184,29 @@ happens to share a slug. The second case is silent data loss. A Noul routes it t
 
 ## Bigger bets
 
-### 10. Evals
+### 10. Host the agent on Cloudflare (the rest of the blog wiring)
+
+Done: `publish_post` now pushes to the live blog's D1 over the REST API, so a post
+published locally appears on the site without a manual seed. What remains is moving the
+agent itself onto Cloudflare.
+
+- **Drafts need durable storage.** `useSandbox(local({}))` has no counterpart on Workers.
+  Cloudflare Computer (SQLite-backed workspace in the agent's own Durable Object) is the
+  drop-in: it keeps Flue's `read`/`write`/`edit`/`bash`/`grep`/`glob` tools, so the existing
+  drafts/ workflow and the skills do not have to change. Add with
+  `npx flue add sandbox cloudflare-computer`.
+- **Drafts belong in a second D1 database**, bound only by the agent, so the public Worker
+  physically cannot read unreviewed work.
+- Flue's Cloudflare target needs `vite.config.ts` with `flue()` + `@cloudflare/vite-plugin`,
+  `nodejs_compat` and a DO migration per agent in a root `wrangler.jsonc`, and the removal of
+  `src/db.ts` (rejected at build time on this target).
+- The LLM must move off local Lemonade. Workers AI is not viable on the free plan (10,000
+  neurons/day), so this needs Mistral free and/or OpenCode Go — `receiptScanner` already
+  implements that chain, including the pacing rule for `mistral-small` (1 request/second).
+- Once the agent holds a D1 **binding**, the REST token can go away entirely: the binding is
+  scoped to the Worker and nothing needs to sit in `.env`. That is the real win of this step.
+
+### 11. Evals
 
 `src/evals/*.eval.ts` on a separate Vitest config, per the
 [Flue evals guide](https://flueframework.com/docs/guide/evals/). Assert the behavioural
@@ -195,7 +217,7 @@ The highest-value item on this list for a writing agent — it's what keeps the 
 honest as the prompt evolves. There is currently one plain-script regression test
 (`tests/verify-claims.check.ts`) and no coverage of agent behaviour.
 
-### 11. Subagents
+### 12. Subagents
 
 `useSubagent()` for researcher / fact-checker / editor in fresh contexts. Matters most because
 the local model runs at `maxTokens: 8192` — research dumps currently land in the same window
@@ -204,7 +226,7 @@ as the draft. `GeneralSubagent` is available for ad-hoc fan-out.
 Also worth considering: routing the editor to a hosted model while drafting stays local, via
 per-delegate `model`.
 
-### 12. A UI on the site
+### 13. A UI on the site
 
 `site/` is the public blog (`site/README.md`). The next step there is not a chat UI but wiring
 the agent to publish into it, per the "Decided" section above.
@@ -215,26 +237,26 @@ belongs — a UI press is a genuine human signal in a way no in-band approval to
 with authentication and a conversation-ownership check, since mounting is the *exposure*
 decision.
 
-### 13. Observability
+### 14. Observability
 
 `observe()` in `app.ts` for `turn` events (token usage and cost per post), `tool` events, and
 `submission_settled` outcomes. Then `flue add tooling opentelemetry` for a backend. With a
 local model, cost is zero but latency is not, and verification adds a Tavily + TypeSafe round
 trip per draft.
 
-### 14. Durable publishing
+### 15. Durable publishing
 
 `publish_post` is a single `copyFile`, so it does not need `durable: true` today. The moment
 publishing becomes git-commit → push → build-hook, it does: declare it a durable tool and put
 each effect in `step.do(name, fn)` so a crash mid-publish replays instead of double-committing.
 
-### 15. A schedule
+### 16. A schedule
 
 `croner` in `app.ts` + `dispatch(BloggerAgent, { id, message: { kind: 'signal', … } })` for a
 weekly draft on a topic. Fixed id keeps one continuing conversation with memory of past posts;
 per-fire id (`weekly-2026-07-24`) bounds the context.
 
-### 16. A GitHub channel
+### 17. A GitHub channel
 
 `flue add channel github` — a signal on `issue_comment.created` or a PR review, dispatched into
 the conversation, with a `reply_in_pr` tool whose repo and PR are bound in trusted code rather

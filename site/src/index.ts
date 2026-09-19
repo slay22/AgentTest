@@ -1,4 +1,4 @@
-import { countWords, renderMarkdown } from './markdown';
+import { countWords, renderMarkdown } from './markdown.ts';
 import {
   countPosts,
   deletePost,
@@ -6,11 +6,11 @@ import {
   listPosts,
   listTags,
   upsertPost,
-} from './repository';
-import { createRouter, type RouteContext } from './router';
-import { parsePublishPost } from './validation';
-import { VERSION } from './version';
-import { feed, indexPage, notFoundPage, postPage, sitemap, type SiteConfig } from './views';
+} from './repository.ts';
+import { createRouter, type RouteContext } from './router.ts';
+import { parsePublishPost } from './validation.ts';
+import { VERSION } from './version.ts';
+import { feed, indexPage, notFoundPage, postPage, sitemap, type SiteConfig } from './views.ts';
 
 // The Worker is the whole server: no framework, matching the receiptScanner
 // convention. Static files are served through the ASSETS binding, so the fetch

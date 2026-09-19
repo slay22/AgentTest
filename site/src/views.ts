@@ -1,5 +1,5 @@
-import { escapeHtml, readingMinutes } from './markdown';
-import type { Post, PostSummary } from './repository';
+import { escapeHtml, readingMinutes } from './markdown.ts';
+import type { Post, PostSummary } from './repository.ts';
 
 // HTML assembled as strings. No template engine: building a few hundred bytes of
 // markup is the cheapest thing a Worker can do, which matters under the free

@@ -54,6 +54,10 @@ export function BloggerAgent() {
 	// all until at least one draft has been approved, and it re-checks the
 	// specific path at call time.
 	const [approvedDrafts, setApprovedDrafts] = usePersistentState<string[]>('approvedDrafts', []);
+	const [approvalQuotes, setApprovalQuotes] = usePersistentState<Record<string, string>>(
+		'approvalQuotes',
+		{},
+	);
 
 	// Skills are progressively disclosed: each costs one catalog line here, and
 	// its instructions load only when the model activates it.
@@ -68,13 +72,18 @@ export function BloggerAgent() {
 			setApprovedDrafts((previous) =>
 				previous.includes(absDraftPath) ? previous : [...previous, absDraftPath],
 			);
+			setApprovalQuotes((previous) => ({ ...previous, [absDraftPath]: userQuote }));
 		}),
 	);
 
 	const draftsDir = draftsRoot();
 	const canPublish = approvedDrafts.length > 0;
 	if (canPublish) {
-		useTool(publishPost((absDraftPath) => approvedDrafts.includes(absDraftPath)));
+		useTool(
+			publishPost((absDraftPath) => approvedDrafts.includes(absDraftPath), {
+				approvalFor: (absDraftPath) => approvalQuotes[absDraftPath] ?? null,
+			}),
+		);
 	}
 
 	// Keep the instructions truthful about the tool set: before any approval,
@@ -101,7 +110,7 @@ Workflow:
 2. Draft. Activate post-metadata, write the draft into ${draftsDir}/, then activate house-voice and revise against it. Treat that directory as your working area: revise files there whenever the user asks for changes.
 3. Fact-check. Activate fact-check, extract every checkable claim as a self-contained sentence, and pass them to verify_claims in one call. It returns a machine-verified verdict table whose source URLs are copied from real search results. Correct or cut every claim listed in mustFix, then re-verify. A draft is not ready while mustFix is non-empty.
 ${publishStep}
-5. After publishing, report the destination path, whether an existing post was replaced, and the draftFlag value the tool returned. Report it literally: only "flipped" means the draft flag was actually changed, and the tool tells you what to say for each other case.
+5. After publishing, report three things literally as the tool returned them: the destination path, whether an existing post was replaced, and the draftFlag value (only "flipped" means the draft flag was actually changed). Also report the blog.updated field: if it is false the post did NOT reach the live site, and you must say so plainly and pass on the reason rather than implying it is live.
 
 Approval rules. Call approve_draft only when the user has said, in their own words, to publish this specific post now. A finished draft is not approval. Praise is not approval. Approving one post is never approval for another. When in doubt, ask before approving.`;
 }

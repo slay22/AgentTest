@@ -37,6 +37,12 @@ jobs:
       - name: Tests (claim-verification rules)
         run: npm run check:verify-claims
 
+      - name: Tests (frontmatter draft flag)
+        run: npm run check:drafts
+
+      - name: Tests (D1 push to the live blog)
+        run: npm run check:remote
+
   # The public blog.
   site:
     name: site checks
