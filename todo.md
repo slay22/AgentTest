@@ -139,6 +139,34 @@ free, so this costs nothing.
 Publishing then becomes: read the draft, render markdown, write the post. Which is the step the
 agent already owns.
 
+### Deployment credentials live in GitHub; runtime secrets live in Cloudflare
+
+A secret belongs where the code that consumes it runs, and these are two different
+credentials with two different consumers:
+
+- `CLOUDFLARE_API_TOKEN` is read by **GitHub Actions** in the `wrangler deploy` step, so it
+  lives in GitHub. Cloudflare Worker secrets are only exposed to the Worker at runtime as
+  bindings — nothing outside the Worker can read them, CI included — and the credential that
+  deploys a Worker cannot live inside it.
+- Runtime secrets (`PUBLISH_ENABLED`, and later `TELEGRAM_BOT_TOKEN`, `MISTRAL_API_KEY`) are
+  read by the **Worker** via `env.X`, so they live in Cloudflare via `wrangler secret put`.
+
+The names invite the opposite reading: `CLOUDFLARE_API_TOKEN` is a GitHub-side secret that
+authenticates *to* Cloudflare.
+
+Alternatives considered and kept in reserve:
+
+- **Workers Builds** would remove the GitHub-side credential entirely, since Cloudflare would
+  build and deploy from the repo itself. Rejected for now only because this workflow tests two
+  projects and runs a post-deploy gate — more than a build command — and its free-plan limits
+  are unverified.
+- **Secrets Store** (open beta) is the Cloudflare-native home for runtime secrets shared across
+  Workers. Worth revisiting when the agent and the site need the same secret.
+
+`CLOUDFLARE_ACCOUNT_ID` is stored as a secret purely to match `receiptScanner`'s workflow, which
+reads `secrets.CLOUDFLARE_ACCOUNT_ID`. It is not actually a credential, and switching either
+repo to a repo *variable* later is a two-line change.
+
 ### Workers AI is not viable for this agent on the free plan
 
 **10,000 neurons/day.** Not enough for a writing agent that runs multi-turn research. This
