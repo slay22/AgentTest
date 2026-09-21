@@ -20,6 +20,25 @@ The architectural break is that Jev is non-autoregressive. It doesn't predict th
 
 TypeSafe describes Jev as running roughly two orders of magnitude faster and more efficiently than comparable frontier models, with end-to-end response times reported at 70 to 500 milliseconds. LangChain, working from the same launch data, puts the gap at up to 200x faster inference and 400x lower cost on classification tasks. Pricing is the sharpest part: $0.042 per million input tokens, with output free, against the $0.20 to $10 per million that conversational models charge.
 
+That range spans more than two orders of magnitude, so the chart uses a log scale — on a linear axis the two cheaper bars would be slivers indistinguishable from each other.
+
+```chart
+{
+  "type": "bar",
+  "title": "Input price per million tokens",
+  "unit": "USD per million input tokens",
+  "scale": "log",
+  "source": "typesafe.ai: \"$42 per billion input tokens\" and \"238x lower input price than Claude Fable 5.1\", retrieved 2026-09-21",
+  "items": [
+    { "label": "Jev", "value": 0.042, "note": "stated as $42 per billion" },
+    { "label": "Budget conversational", "value": 0.2 },
+    { "label": "Frontier conversational", "value": 10, "note": "implied by TypeSafe's 238x claim" }
+  ]
+}
+```
+
+Jev's own figure is stated on TypeSafe's site as $42 per billion input tokens; the frontier figure is what their "238x lower" comparison against Claude Fable 5.1 implies. Both are the vendor's numbers, not an independent benchmark, and TypeSafe says the pricing may be subsidised.
+
 The mechanism behind the speed is a parallel sampler. Every question in a request is evaluated at once, so asking about ten fields of a support ticket costs only the tokens for those extra questions and barely moves the response time. TypeSafe's own workflow benchmark puts Jev at 67.8 percent — the same score as Sonnet 5 — at about $0.0004 per case, in roughly 0.4 seconds per task versus 78 seconds for Sonnet 5.
 
 ## Where you'd actually point it

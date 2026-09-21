@@ -416,6 +416,15 @@ escaped, and that raw HTML in prose still is too.
 Diagrams — flowcharts, sequence diagrams — are where mermaid earns its weight, and adding it stays
 a separate decision.
 
+### Log scale
+
+`"scale": "log"` exists because cost and latency comparisons routinely span two or three orders of
+magnitude. On a linear axis a 240× spread renders the cheap value as a 2px sliver — indistinguishable
+from a value five times larger, which is worse than no chart. The axis is labelled by decade, the
+caption says "log scale", and bars and gridlines are computed from the same bounds, so a bar ends
+exactly on the gridline for its value. A zero or negative value is refused rather than dropped:
+`tests/charts.test.ts` covers all of it.
+
 ### Failure is visible
 
 A spec that does not validate renders as an explanatory error in place of the chart, naming the

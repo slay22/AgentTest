@@ -31,6 +31,17 @@ const barChart = z.object({
   unit: z.string().min(1).max(40),
   /** Where the numbers came from. Required — an unsourced figure is a claim. */
   source: z.string().min(1).max(200),
+  /**
+   * How bar lengths map to values.
+   *
+   * `linear` is the default and the honest one for anything within a small
+   * multiple. `log` exists because cost and latency comparisons routinely span two
+   * or three orders of magnitude, and on a linear axis the cheap bar collapses to
+   * a sliver indistinguishable from one five times larger. A log chart says so in
+   * the caption, and its axis ticks are labelled, so it cannot quietly mislead.
+   * All values must be positive.
+   */
+  scale: z.enum(['linear', 'log']).default('linear'),
   items: z.array(item).min(2).max(8),
 });
 
@@ -57,7 +68,11 @@ export function parseChartSpec(raw: string): ChartResult {
       .join('; ');
     return { ok: false, error: detail };
   }
-  return { ok: true, svg: renderBarChart(parsed.data), spec: parsed.data };
+  try {
+    return { ok: true, svg: renderBarChart(parsed.data), spec: parsed.data };
+  } catch (error) {
+    return { ok: false, error: (error as Error).message };
+  }
 }
 
 const WIDTH = 720;
@@ -68,14 +83,41 @@ const PAD = 18;
 
 function renderBarChart(spec: ChartSpec): string {
   const rows = spec.items.length;
-  const chartTop = 54;
+  const values = spec.items.map((entry) => entry.value);
+  const log = spec.scale === 'log';
+  const chartTop = log ? 74 : 54;
   const height = chartTop + rows * ROW_HEIGHT + 40;
   const plotWidth = WIDTH - LABEL_WIDTH - PAD * 2 - 72;
 
-  // Bars are scaled to the largest value so the comparison is honest: no
-  // truncated baseline, because a bar chart with a cut axis misleads.
-  const max = Math.max(...spec.items.map((entry) => entry.value));
-  const scale = (value: number): number => (max <= 0 ? 0 : (value / max) * plotWidth);
+  if (log && values.some((value) => value <= 0)) {
+    // A log axis cannot represent zero or a negative value, and silently dropping
+    // the bar would hide a figure. Better to refuse and say so.
+    throw new Error('a log scale needs every value to be greater than zero');
+  }
+
+  // Bars are scaled to the largest value so the comparison is honest: no truncated
+  // baseline, because a bar chart with a cut axis misleads. On a log scale the
+  // baseline cannot be zero either, which is why the caption says "log scale".
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+
+  // On a log scale the axis runs between whole decades, and the bars must use the
+  // same bounds as the gridlines or they will not line up with their own axis.
+  // Scaling from the smallest *value* instead would give that value zero width —
+  // it would collapse to the clamp while sitting under a gridline labelled lower.
+  const axisLow = log ? Math.floor(Math.log10(min)) : 0;
+  const axisHigh = log ? Math.ceil(Math.log10(max)) : 0;
+  const axisSpan = axisHigh - axisLow;
+
+  const scale = (value: number): number => {
+    if (max <= 0) return 0;
+    if (!log) return (value / max) * plotWidth;
+    if (axisSpan === 0) return plotWidth;
+    return ((Math.log10(value) - axisLow) / axisSpan) * plotWidth;
+  };
+
+  // Decade ticks, so the axis is readable rather than implying linear steps.
+  const axis = log ? renderLogAxis(chartTop, rows, plotWidth, axisLow, axisSpan) : '';
 
   const bars = spec.items
     .map((entry, index) => {
@@ -102,10 +144,39 @@ function renderBarChart(spec: ChartSpec): string {
   return `<figure class="chart">
   <figcaption class="chart-title">${escapeHtml(spec.title)}</figcaption>
   <svg viewBox="0 0 ${WIDTH} ${height}" role="img" aria-label="${escapeHtml(`${spec.title}. ${summary}`)}" preserveAspectRatio="xMidYMid meet">
+${axis}
 ${bars}
   </svg>
-  <figcaption class="chart-meta">${escapeHtml(spec.unit)} · Source: ${escapeHtml(spec.source)}</figcaption>
+  <figcaption class="chart-meta">${escapeHtml(spec.unit)}${log ? ' · log scale' : ''} · Source: ${escapeHtml(spec.source)}</figcaption>
 </figure>`;
+}
+
+/** Decade gridlines with their values, drawn behind the bars. */
+function renderLogAxis(
+  chartTop: number,
+  rows: number,
+  plotWidth: number,
+  axisLow: number,
+  axisSpan: number,
+): string {
+  const bottom = chartTop + rows * ROW_HEIGHT - 6;
+  const span = axisSpan || 1;
+
+  const ticks: string[] = [];
+  for (let decade = axisLow; decade <= axisLow + axisSpan; decade++) {
+    const x = LABEL_WIDTH + ((decade - axisLow) / span) * plotWidth;
+    const label = formatDecade(decade);
+    ticks.push(
+      `  <line class="chart-grid" x1="${x}" y1="${chartTop - 8}" x2="${x}" y2="${bottom}" />\n` +
+        `  <text class="chart-tick" x="${x}" y="${bottom + 16}" text-anchor="middle">${escapeHtml(label)}</text>`,
+    );
+  }
+  return ticks.join('\n');
+}
+
+function formatDecade(decade: number): string {
+  if (decade >= 0) return String(10 ** decade);
+  return (10 ** decade).toFixed(-decade).replace(/0+$/, (zeros) => (decade <= -3 ? '' : zeros));
 }
 
 /** Trim trailing zeros but keep small values legible. */

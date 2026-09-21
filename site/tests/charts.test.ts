@@ -139,3 +139,95 @@ describe('the escape-first guarantee still holds', () => {
     expect(renderMarkdown('[x](javascript:alert(1))')).not.toContain('javascript:');
   });
 });
+
+describe('log scale', () => {
+  const wide = (over: Record<string, unknown> = {}) =>
+    // A 238x spread, which on a linear axis renders two indistinguishable slivers.
+    JSON.stringify({
+      type: 'bar',
+      title: 'Input price',
+      unit: 'USD per million tokens',
+      source: 'typesafe.ai, retrieved 2026-09-21',
+      scale: 'log',
+      items: [
+        { label: 'Jev', value: 0.042 },
+        { label: 'Typical', value: 0.2 },
+        { label: 'Frontier', value: 10 },
+      ],
+      ...over,
+    });
+
+  it('makes values two orders of magnitude apart distinguishable', () => {
+    const result = parseChartSpec(wide());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const widths = [...result.svg.matchAll(/class="chart-bar"[^>]*width="(\d+)"/g)].map((m) => Number(m[1]));
+    expect(widths).toHaveLength(3);
+    // Ordered, and the two small values differ visibly instead of both being
+    // clamped to the minimum.
+    expect(widths[0]).toBeLessThan(widths[1]);
+    expect(widths[1]).toBeLessThan(widths[2]);
+    expect(widths[1] - widths[0]).toBeGreaterThan(30);
+  });
+
+  it('labels the axis by decade, so it cannot be read as linear', () => {
+    const result = parseChartSpec(wide());
+    if (!result.ok) return;
+    expect(result.svg).toContain('class="chart-tick"');
+    expect(result.svg).toContain('0.01');
+    expect(result.svg).toContain('10');
+  });
+
+  it('says "log scale" in the caption', () => {
+    const result = parseChartSpec(wide());
+    if (!result.ok) return;
+    expect(result.svg).toContain('log scale');
+  });
+
+  it('refuses a log scale with a zero or negative value rather than hiding the bar', () => {
+    const zero = parseChartSpec(wide({ items: [{ label: 'a', value: 0 }, { label: 'b', value: 10 }] }));
+    expect(zero.ok).toBe(false);
+    if (!zero.ok) expect(zero.error).toContain('greater than zero');
+    expect(parseChartSpec(wide({ items: [{ label: 'a', value: -1 }, { label: 'b', value: 10 }] })).ok).toBe(false);
+  });
+
+  it('defaults to linear, which stays the honest choice at small ratios', () => {
+    const result = parseChartSpec(JSON.stringify({
+      type: 'bar', title: 't', unit: 'u', source: 's',
+      items: [{ label: 'a', value: 10 }, { label: 'b', value: 5 }],
+    }));
+    if (!result.ok) return;
+    expect(result.svg).not.toContain('log scale');
+    const widths = [...result.svg.matchAll(/class="chart-bar"[^>]*width="(\d+)"/g)].map((m) => Number(m[1]));
+    expect(widths[0] / widths[1]).toBeCloseTo(2, 1);
+  });
+});
+
+describe('log axis alignment', () => {
+  it('gives the smallest value a real bar, not the clamp', () => {
+    const result = parseChartSpec(JSON.stringify({
+      type: 'bar', title: 't', unit: 'u', source: 's', scale: 'log',
+      items: [{ label: 'cheap', value: 0.042 }, { label: 'dear', value: 10 }],
+    }));
+    if (!result.ok) throw new Error('expected ok');
+    const widths = [...result.svg.matchAll(/class="chart-bar"[^>]*width="(\d+)"/g)].map((m) => Number(m[1]));
+    // 0.042 sits between the 0.01 and 0.1 decades, so it is a substantial fraction
+    // of the width rather than a 2px sliver.
+    expect(widths[0]).toBeGreaterThan(50);
+  });
+
+  it('ends the largest bar at the top decade gridline', () => {
+    const result = parseChartSpec(JSON.stringify({
+      type: 'bar', title: 't', unit: 'u', source: 's', scale: 'log',
+      items: [{ label: 'cheap', value: 0.042 }, { label: 'dear', value: 10 }],
+    }));
+    if (!result.ok) throw new Error('expected ok');
+    const bars = [...result.svg.matchAll(/class="chart-bar" x="(\d+)"[^>]*width="(\d+)"/g)]
+      .map((m) => [Number(m[1]), Number(m[2])] as const);
+    const ticks = [...result.svg.matchAll(/class="chart-grid" x1="([\d.]+)"/g)].map((m) => Number(m[1]));
+    const lastBarEnd = bars.at(-1)![0] + bars.at(-1)![1];
+    const lastTick = ticks.at(-1)!;
+    // The largest value is exactly the top decade, so its bar ends on that gridline.
+    expect(Math.abs(lastBarEnd - lastTick)).toBeLessThan(1.5);
+  });
+});

@@ -757,3 +757,11 @@ footer.site a { color: var(--fg); }
 	margin: 0.5rem 0 0;
 	overflow-x: auto;
 }
+
+.chart-grid { stroke: currentColor; opacity: 0.12; }
+.chart-tick {
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: 11px;
+	fill: currentColor;
+	opacity: 0.5;
+}

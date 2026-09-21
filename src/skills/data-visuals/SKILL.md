@@ -52,9 +52,25 @@ A fenced block whose language is `chart`, containing JSON:
 | `source` | **Required.** Where every figure came from, with a retrieval date. |
 | `items` | 2–8 entries. `label` ≤40 characters, `value` a finite number. |
 | `note` | Optional, per item, when one figure has a different basis from the others. |
+| `scale` | `"linear"` (default) or `"log"`. See below. |
 
 Bars are scaled to the largest value, so the relative sizes are honest. Do not put a figure in the
 spec that is not also stated in the prose — a chart is not a place to hide a number from review.
+
+### When the spread needs a log scale
+
+If the largest value is more than roughly twenty times the smallest, a linear chart is not honest:
+the small bars collapse into the same indistinguishable sliver, so a 5× difference looks like no
+difference. Set `"scale": "log"` and say so in the prose, because the reader is entitled to know
+the axis is not linear.
+
+```json
+{ "scale": "log", "items": [ { "label": "Jev", "value": 0.042 }, { "label": "Frontier", "value": 10 } ] }
+```
+
+The axis is labelled by decade, the caption says "log scale", and every value must be greater than
+zero — a zero or negative value is refused rather than silently dropped. Use `linear` for anything
+close in magnitude; a log chart of two similar numbers is harder to read than a linear one.
 
 ## Sources are not optional
 
