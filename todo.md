@@ -231,6 +231,42 @@ happens to share a slug. The second case is silent data loss. A Noul routes it t
 
 ---
 
+### The local model's reasoning, not the task structure, is the bottleneck
+
+Measured from a real 25-minute run (1,498s, one Telegram request), reconstructed from the
+durable conversation stream:
+
+| | |
+| --- | --- |
+| reasoning characters | 46,692 (12,863 `assistant_reasoning_delta` records, 95% of the stream) |
+| visible answer characters | 1,952 |
+| ratio | **24:1 reasoning to answer** |
+| tool calls | 24, of which 10 `verify_claims`, 8 `web_search` |
+| effective generation | ~20 tokens/second |
+
+11,673 reasoning tokens at ~20 tok/s is about 15 minutes of the 25. The tool calls — Tavily,
+TypeSafe, file reads — are noise beside it. So **subagents would not have fixed the slowness**:
+every delegate reasons too, and on one local GPU parallel delegates contend for the same compute.
+
+The lever is the model's thinking mode:
+
+- `enable_thinking: false` in the request removes reasoning entirely — verified with unique
+  prompts, 2,991 chars of reasoning to 0. Roughly halves the run.
+- **`/no_think` in the prompt does not work** on this model; it produced *more* reasoning.
+- `reasoning: false` in the provider registration only stops Flue *sending* a thinking level. It
+  does not stop the model reasoning on its own, which is why the deltas flow regardless.
+
+Wiring it needs a provider change, since Flue currently drops the thinking level for a model
+declared `reasoning: false`. Two ways: declare `reasoning: true` and see whether `thinkingLevel:
+'off'` reaches the wire as `enable_thinking: false`, or supply a custom `api` that sets it.
+
+Caveat before turning it off globally: reasoning helps multi-step tool use, so it may trade
+correctness for speed. Worth testing on a real drafting run rather than assuming.
+
+A trap worth remembering: the first experiment appeared to show four different parameters all
+suppressing reasoning, including one that does not exist. The cause was response caching from
+repeating an identical prompt. Any comparison of model behaviour needs distinct prompts.
+
 ## Bigger bets
 
 ### 10. Host the agent on Cloudflare (the rest of the blog wiring)
