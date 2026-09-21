@@ -20,8 +20,21 @@ import { resolve } from 'node:path';
 import { Api } from 'grammy';
 
 const ROOT = resolve(import.meta.dirname, '..');
-const DEV_ORIGIN = process.env.DEV_ORIGIN ?? 'http://localhost:5173';
+// The BUILT server, not `vite dev`. See assertSafeToExpose below.
+const DEV_ORIGIN = process.env.DEV_ORIGIN ?? 'http://localhost:3000';
 const WEBHOOK_PATH = '/channels/telegram/webhook';
+
+// Two tunnel modes.
+//
+// Named (TELEGRAM_TUNNEL_NAME + TELEGRAM_PUBLIC_ORIGIN set): a permanent tunnel
+// with a DNS record, so the hostname never changes. Nothing is parsed out of
+// cloudflared's output and the URL is known up front.
+//
+// Quick (neither set): a throwaway trycloudflare.com hostname, read from
+// cloudflared's stderr, different on every run.
+const TUNNEL_NAME = process.env.TELEGRAM_TUNNEL_NAME;
+const PUBLIC_ORIGIN = process.env.TELEGRAM_PUBLIC_ORIGIN;
+const NAMED = Boolean(TUNNEL_NAME && PUBLIC_ORIGIN);
 
 function loadEnv(): void {
   let text: string;
@@ -45,17 +58,59 @@ function required(name: string): string {
   return value;
 }
 
-/** The dev server must be up first, or the tunnel only ever returns 502. */
-async function assertDevServerRunning(): Promise<void> {
+/** The server must be up first, or the tunnel only ever returns 502. */
+async function assertServerRunning(): Promise<void> {
   try {
     const response = await fetch(`${DEV_ORIGIN}/healthz`, { signal: AbortSignal.timeout(4000) });
     if (!response.ok) throw new Error(`/healthz returned ${response.status}`);
   } catch (error) {
     throw new Error(
       `Nothing healthy at ${DEV_ORIGIN} (${(error as Error).message}).\n` +
-        'Start the agent first, in another terminal:  npm run dev',
+        'Start the agent first, in another terminal:\n' +
+        '  npm run build && npm start',
     );
   }
+}
+
+/**
+ * Refuse to tunnel the Vite dev server.
+ *
+ * `vite dev` serves the project root, not just the application: /src/**, 
+ * package.json, node_modules metadata, and drafts/*.md all came back 200 through
+ * a tunnel during testing. Only dotfiles like .env are blocked. The built server
+ * serves app.ts's routes and nothing else, which is also what would be deployed.
+ *
+ * Detected by probing for Vite's dev client rather than by checking the port,
+ * because the port is configurable and this must not be fooled by it.
+ */
+async function assertSafeToExpose(): Promise<void> {
+  try {
+    const probe = await fetch(`${DEV_ORIGIN}/@vite/client`, {
+      signal: AbortSignal.timeout(4000),
+    });
+    if (probe.ok) {
+      throw new Error(
+        `${DEV_ORIGIN} is the Vite dev server, which serves the whole project root —\n` +
+          'source files, package.json, node_modules, and drafts/*.md are all readable\n' +
+          'through a tunnel. Only .env is blocked, which is not enough.\n\n' +
+          'Tunnel the built server instead:\n' +
+          '  npm run build && npm start          # serves app.ts routes only\n' +
+          'or point DEV_ORIGIN at it if it runs elsewhere.',
+      );
+    }
+  } catch (error) {
+    if ((error as Error).message.includes('Vite dev server')) throw error;
+    // A failed probe means it is not the dev server, which is what we want.
+  }
+}
+
+/** A permanent tunnel: the hostname comes from DNS, not from cloudflared. */
+function startNamedTunnel(name: string): ChildProcess {
+  return spawn(
+    'cloudflared',
+    ['tunnel', 'run', '--url', DEV_ORIGIN, name],
+    { stdio: ['ignore', 'pipe', 'pipe'] },
+  );
 }
 
 /** cloudflared prints the assigned hostname to stderr, not stdout. */
@@ -98,16 +153,30 @@ async function main(): Promise<void> {
     throw new Error('TELEGRAM_WEBHOOK_SECRET_TOKEN may contain only letters, numbers, _ and -.');
   }
 
-  await assertDevServerRunning();
+  await assertServerRunning();
+  await assertSafeToExpose();
   const api = new Api(token);
   const me = await api.getMe();
 
   console.log(`bot:    @${me.username ?? '(no username)'}`);
   console.log(`local:  ${DEV_ORIGIN}`);
-  console.log('tunnel: starting...');
 
-  const { child, url } = startTunnel();
-  const origin = await url;
+  let child: ChildProcess;
+  let origin: string;
+
+  if (NAMED) {
+    console.log(`tunnel: ${TUNNEL_NAME} (named, stable hostname)`);
+    child = startNamedTunnel(TUNNEL_NAME!);
+    // The connection takes a moment to register; the hostname itself is fixed.
+    await new Promise((r) => setTimeout(r, 6000));
+    origin = PUBLIC_ORIGIN!.replace(/\/$/, '');
+  } else {
+    console.log('tunnel: starting a quick tunnel...');
+    const quick = startTunnel();
+    child = quick.child;
+    origin = await quick.url;
+  }
+
   const webhookUrl = `${origin}${WEBHOOK_PATH}`;
 
   await api.setWebhook(webhookUrl, {

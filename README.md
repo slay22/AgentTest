@@ -280,22 +280,72 @@ npm run telegram -- delete        # stop deliveries
 `info` is the first thing to check when messages stop arriving: `last_error_message` says whether
 Telegram could not reach the URL or the secret changed.
 
-### Reaching the dev server from outside
+### Exposing it: tunnel the built server, never `vite dev`
 
-Telegram only delivers to public HTTPS, so something has to expose the dev server.
-`cloudflared` is the no-account option (`brew install cloudflared`; `brew uninstall cloudflared`
-reverses it).
+Telegram only delivers to public HTTPS, so something has to expose the agent. Two options.
 
-One trap worth knowing: **Vite refuses requests whose `Host` header it does not recognise**, which
-is DNS-rebinding protection. Through a tunnel that reads as `403 Blocked request. This host is not
-allowed.` — indistinguishable from a webhook fault. `vite.config.ts` therefore sets
-`server.allowedHosts: ['.trycloudflare.com']`, scoped to the tunnel domain rather than
-`allowedHosts: true`, which would disable the protection outright.
+**Quick tunnel** — throwaway hostname, no setup:
 
-The dev server binds to IPv6 `[::1]` only, so use `localhost`, not `127.0.0.1`.
+```sh
+npm run telegram:dev       # starts a tunnel and registers the webhook
+```
 
-A quick tunnel is a development tool, not a production path: the URL is random and public. The
-webhook secret and the sender allowlist are what actually protect the agent.
+**Named tunnel** — a permanent hostname, so the webhook is registered once:
+
+```sh
+cloudflared tunnel login                                   # browser, once
+cloudflared tunnel create agent-post
+cloudflared tunnel route dns agent-post agent-post.fliagutierrez.com
+```
+
+Then set both in `.env` and `npm run telegram:dev` uses it automatically:
+
+```sh
+TELEGRAM_TUNNEL_NAME=agent-post
+TELEGRAM_PUBLIC_ORIGIN=https://agent-post.fliagutierrez.com
+```
+
+That path is already set up for this project. `cloudflared tunnel list` shows the tunnels, and
+`cloudflared tunnel delete agent-post` plus removing the DNS record reverses it.
+
+#### Why the built server and not `vite dev`
+
+`vite dev` serves the **project root**, not just the application. Probing it through a tunnel
+returned `200` for all of these:
+
+| Path | `vite dev` | Built server |
+| --- | --- | --- |
+| `/src/app.ts`, `/src/agents/blogger-agent.ts` | **200** | 404 |
+| `/package.json`, `/node_modules/…/package.json` | **200** | 404 |
+| `/drafts/local-llms.md`, `/posts/local-llms.md` | **200** | 404 |
+| `/.env` | 403 | 404 |
+| `/healthz` | 200 | 200 |
+| `/channels/telegram/webhook` | 401 without a secret | 401 without a secret |
+
+Only dotfiles are blocked, which is nowhere near enough — the agent's prompts, every tool's
+logic, and the unpublished drafts were all readable by anyone with the hostname. So run the
+built server:
+
+```sh
+npm run build && npm start      # dist/server.mjs on port 3000
+```
+
+`scripts/telegram-dev.ts` **refuses** to tunnel `vite dev`, detecting it by probing for Vite's dev
+client rather than by port, and explains what to do instead.
+
+Two further details about the built server: it reads the real process environment rather than
+`.env`, which is why `npm start` is `node --env-file=.env dist/server.mjs`; and `vite dev` binds
+IPv6 `[::1]` only, so anything pointed at it must use `localhost`, not `127.0.0.1`.
+
+#### Do not put Cloudflare Access in front of this hostname
+
+The instinct is to protect a hostname that reaches your machine. **Access would break it**:
+Telegram POSTs to the webhook, gets a `302` to a login page, and gives up. Access belongs on
+`blog.fliagutierrez.com/drafts*`, which humans open in a browser; the webhook's protection is its
+secret token plus the sender allowlist.
+
+The only paths the built server answers are `/healthz` and the webhook. The agent is not mounted
+over HTTP, so no conversation is reachable.
 
 ### Two deliberate deviations from the blueprint
 
