@@ -6,4 +6,16 @@ import { defineConfig } from 'vite';
 // without this file there is no application — only `flue run` for one module.
 export default defineConfig({
   plugins: [flue()],
+
+  server: {
+    // Vite refuses requests whose Host header it does not recognise, which is what
+    // DNS-rebinding protection looks like from the outside. A Cloudflare quick
+    // tunnel sends its own random hostname, so without this every tunnel request
+    // gets Vite's "Blocked request" 403 — and a Telegram delivery failing with 403
+    // is indistinguishable from a webhook problem.
+    //
+    // Scoped to the tunnel domain rather than `allowedHosts: true`, which would
+    // disable the protection entirely.
+    allowedHosts: ['.trycloudflare.com'],
+  },
 });

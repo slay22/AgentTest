@@ -228,27 +228,74 @@ prefix-of-a-listed id, and missing sender ids are all refused.
 
 ### Setup
 
-1. Create a bot with **@BotFather**; put its token in `TELEGRAM_BOT_TOKEN`.
-2. Get your numeric user id from **@userinfobot**; put it in `TELEGRAM_ALLOWED_USER_IDS`
-   (comma-separated for more than one).
-3. Generate `TELEGRAM_WEBHOOK_SECRET_TOKEN` — letters, numbers, underscores and hyphens only,
-   and never reused across bots (Telegram does not sign request bodies).
-4. The agent must be reachable at a public HTTPS URL. Telegram POSTs to
-   `<origin>/channels/telegram/webhook`, so either deploy it or expose it with a tunnel:
+Only two steps need a Telegram account. Everything else is scripted.
 
-   ```sh
-   npm run dev            # vite dev, port 5173 — binds IPv6 [::1], so use `localhost`
-   ```
+**1. Create the bot.** In Telegram, message **@BotFather**, send `/newbot`, follow the prompts,
+and copy the token it gives you into `.env`:
 
-5. Register the webhook **once**, from a machine holding the bot token:
+```sh
+TELEGRAM_BOT_TOKEN=123456789:AA...      # from @BotFather
+```
 
-   ```ts
-   import { telegramApi } from './src/channels/telegram-client.ts';
-   await telegramApi().setWebhook('https://<your-origin>/channels/telegram/webhook', {
-     secret_token: process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN!,
-     allowed_updates: ['message', 'edited_message', 'callback_query'],
-   });
-   ```
+**2. Run it.** In one terminal:
+
+```sh
+npm run dev            # vite dev on port 5173
+```
+
+and in another:
+
+```sh
+npm run telegram:dev   # quick tunnel + registers the webhook
+```
+
+That starts a Cloudflare quick tunnel (no account needed), registers
+`https://<random>.trycloudflare.com/channels/telegram/webhook`, and removes the webhook again on
+Ctrl-C. It is a script because a quick tunnel gets a new hostname every run, so registering by
+hand is the step that gets forgotten — and a stale webhook looks exactly like a broken agent.
+
+**3. Allow yourself.** `TELEGRAM_ALLOWED_USER_IDS` is empty to start, so the first message you
+send is refused — deliberately. That refusal prints your own id:
+
+```
+telegram_sender_rejected {
+  fromId: 123456789,
+  reason: 'TELEGRAM_ALLOWED_USER_IDS is empty, so nobody is allowed',
+  hint: 'add fromId to TELEGRAM_ALLOWED_USER_IDS to allow this sender'
+}
+```
+
+Put that number in `.env`, restart `npm run telegram:dev`, and message again. Nothing else has to
+be looked up; the id comes from your own message rather than from another bot.
+
+### Managing the webhook
+
+```sh
+npm run telegram -- whoami        # verify the token and print the bot
+npm run telegram -- info          # what Telegram has registered, and the last error
+npm run telegram -- set <origin>  # register against a deployment instead
+npm run telegram -- delete        # stop deliveries
+```
+
+`info` is the first thing to check when messages stop arriving: `last_error_message` says whether
+Telegram could not reach the URL or the secret changed.
+
+### Reaching the dev server from outside
+
+Telegram only delivers to public HTTPS, so something has to expose the dev server.
+`cloudflared` is the no-account option (`brew install cloudflared`; `brew uninstall cloudflared`
+reverses it).
+
+One trap worth knowing: **Vite refuses requests whose `Host` header it does not recognise**, which
+is DNS-rebinding protection. Through a tunnel that reads as `403 Blocked request. This host is not
+allowed.` — indistinguishable from a webhook fault. `vite.config.ts` therefore sets
+`server.allowedHosts: ['.trycloudflare.com']`, scoped to the tunnel domain rather than
+`allowedHosts: true`, which would disable the protection outright.
+
+The dev server binds to IPv6 `[::1]` only, so use `localhost`, not `127.0.0.1`.
+
+A quick tunnel is a development tool, not a production path: the URL is random and public. The
+webhook secret and the sender allowlist are what actually protect the agent.
 
 ### Two deliberate deviations from the blueprint
 

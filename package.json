@@ -11,7 +11,9 @@
 		"check:telegram": "node tests/telegram.check.ts",
 		"dev": "vite dev",
 		"build": "vite build",
-		"preview": "vite preview"
+		"preview": "vite preview",
+		"telegram": "node scripts/telegram-webhook.ts",
+		"telegram:dev": "node scripts/telegram-dev.ts"
 	},
 	"dependencies": {
 		"@earendil-works/pi-ai": "^0.83.0",

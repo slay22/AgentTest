@@ -30,6 +30,9 @@ export const channel = createTelegramChannel({
           fromId: incoming.from?.id,
           chatId: incoming.chat.id,
           reason: refusalReason(),
+          // Copied from here into TELEGRAM_ALLOWED_USER_IDS. Seeing your own id
+          // in this line is the expected first run, not a fault.
+          hint: 'add fromId to TELEGRAM_ALLOWED_USER_IDS to allow this sender',
         });
         return;
       }
