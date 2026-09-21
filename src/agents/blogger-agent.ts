@@ -14,6 +14,7 @@ import { local } from '@flue/runtime/node';
 import { createProvider, envApiKeyAuth } from '@earendil-works/pi-ai';
 import * as openaiCompletions from '@earendil-works/pi-ai/api/openai-completions';
 import { approveDraft, type Approval } from '../tools/approve-draft.ts';
+import { previewDraft } from '../tools/preview-draft.ts';
 import { draftsRoot } from '../tools/drafts.ts';
 import { publishPost } from '../tools/publish-post.ts';
 import { verifyClaimsTool } from '../tools/verify-claims.ts';
@@ -83,6 +84,9 @@ export function BloggerAgent() {
 
 	useTool(webSearch);
 	useTool(verifyClaimsTool);
+	// Saves the draft to the blog so it can be read rendered, rather than as
+	// markdown in a chat window. The site owns rendering and access control.
+	useTool(previewDraft());
 	useTool(
 		approveDraft((absDraftPath, approval) => {
 			setApprovals((previous) => ({ ...previous, [absDraftPath]: approval }));
@@ -124,7 +128,7 @@ Skills: call activate_skill to load these before doing the relevant work. Do not
 
 Workflow:
 1. Research. When the topic needs facts, dates, names, or recent news, research it with web_search. Search per specific claim rather than once per topic.
-2. Draft. Activate post-metadata, write the draft into ${draftsDir}/, then activate house-voice and revise against it. Treat that directory as your working area: revise files there whenever the user asks for changes.
+2. Draft. Activate post-metadata, write the draft into ${draftsDir}/, then activate house-voice and revise against it. Treat that directory as your working area: revise files there whenever the user asks for changes. Call preview_draft as soon as there is something worth reading, and again after every revision, then give the user the returned URL so they read it rendered instead of as markdown.
 3. Fact-check. Activate fact-check, extract every checkable claim as a self-contained sentence, and pass them to verify_claims in one call. It returns a machine-verified verdict table whose source URLs are copied from real search results. Correct or cut every claim listed in mustFix, then re-verify. A draft is not ready while mustFix is non-empty.
 ${publishStep}
 5. After publishing, report three things literally as the tool returned them: the destination path, whether an existing post was replaced, and the draftFlag value (only "flipped" means the draft flag was actually changed). Also report the blog.updated field: if it is false the post did NOT reach the live site, and you must say so plainly and pass on the reason rather than implying it is live.

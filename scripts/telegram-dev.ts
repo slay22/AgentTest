@@ -19,23 +19,12 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Api } from 'grammy';
 
+// Declaration order in this header matters. ROOT is env-independent and comes
+// first; loadEnv() must run before anything derived from .env is read at module
+// scope. Getting this wrong is silent: a module-scope read of process.env before
+// loadEnv() simply sees the fallback, and loadEnv() itself would hit the temporal
+// dead zone on ROOT and be swallowed by its own catch.
 const ROOT = resolve(import.meta.dirname, '..');
-// The BUILT server, not `vite dev`. See assertSafeToExpose below.
-const DEV_ORIGIN = process.env.DEV_ORIGIN ?? 'http://localhost:3000';
-const WEBHOOK_PATH = '/channels/telegram/webhook';
-
-// Two tunnel modes.
-//
-// Named (TELEGRAM_TUNNEL_NAME + TELEGRAM_PUBLIC_ORIGIN set): a permanent tunnel
-// with a DNS record, so the hostname never changes. Nothing is parsed out of
-// cloudflared's output and the URL is known up front.
-//
-// Quick (neither set): a throwaway trycloudflare.com hostname, read from
-// cloudflared's stderr, different on every run.
-const TUNNEL_NAME = process.env.TELEGRAM_TUNNEL_NAME;
-const PUBLIC_ORIGIN = process.env.TELEGRAM_PUBLIC_ORIGIN;
-const NAMED = Boolean(TUNNEL_NAME && PUBLIC_ORIGIN);
-
 function loadEnv(): void {
   let text: string;
   try {
@@ -51,6 +40,22 @@ function loadEnv(): void {
 }
 
 loadEnv();
+
+// The BUILT server, not `vite dev`. See assertSafeToExpose below.
+const DEV_ORIGIN = process.env.DEV_ORIGIN ?? 'http://localhost:3000';
+const WEBHOOK_PATH = '/channels/telegram/webhook';
+
+// Two tunnel modes.
+//
+// Named (TELEGRAM_TUNNEL_NAME + TELEGRAM_PUBLIC_ORIGIN set): a permanent tunnel
+// with a DNS record, so the hostname never changes. Nothing is parsed out of
+// cloudflared's output and the URL is known up front.
+//
+// Quick (neither set): a throwaway trycloudflare.com hostname, read from
+// cloudflared's stderr, different on every run.
+const TUNNEL_NAME = process.env.TELEGRAM_TUNNEL_NAME;
+const PUBLIC_ORIGIN = process.env.TELEGRAM_PUBLIC_ORIGIN;
+const NAMED = Boolean(TUNNEL_NAME && PUBLIC_ORIGIN);
 
 function required(name: string): string {
   const value = process.env[name];

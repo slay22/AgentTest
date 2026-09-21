@@ -287,6 +287,20 @@ below is the agent side: where its *working* drafts live.
 - Once the agent holds a D1 **binding**, the REST token can go away entirely: the binding is
   scoped to the Worker and nothing needs to sit in `.env`. That is the real win of this step.
 
+### Two paths to save a draft, and only one works when hosted
+
+`preview_draft` currently POSTs to `BLOG_API_ORIGIN` with `PUBLISH_TOKEN`. That is a **local
+development** path: it needs the site's dev server and its token.
+
+It will not work for a hosted agent. The blog's drafts surface sits behind Cloudflare Access,
+which would redirect the agent to a login and reject it — the same reason the deploy gate asserts
+the surface is not public. A hosted agent therefore has to write the drafts database directly,
+over the D1 REST API (as `pushPostToBlog` already does for posts) or a D1 binding, which also
+removes the token from `.env` entirely.
+
+So when the agent moves to Cloudflare: give `preview_draft` a D1 write path alongside the HTTP
+one, and drop `BLOG_API_ORIGIN` / `PUBLISH_TOKEN` from the agent's environment.
+
 ### 11. Evals
 
 `src/evals/*.eval.ts` on a separate Vitest config, per the
