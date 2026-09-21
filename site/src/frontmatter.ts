@@ -1,13 +1,15 @@
-// Frontmatter reader for the seed script, which imports the markdown files that
-// already live in the repo. The Worker never parses frontmatter: the agent
-// publishes structured JSON over the publish API.
+// Frontmatter reader for the seed script, which imports the markdown in the repo.
+// The Worker itself never parses frontmatter: the agent publishes structured JSON.
 //
-// Deliberately NOT a general YAML parser. It handles the subset these posts use
-// (scalar `key: value` lines and flow-style `[a, b]` lists) and throws on
-// anything else. If the repo adopts richer frontmatter, use a real YAML library
-// rather than extending these regexes — see todo.md item 1.
+// This uses the `yaml` package, the same one the agent uses when it flips the draft
+// flag. That matters more than it looks: the two used to disagree. The agent's
+// YAML re-serialisation folds a long `description` across two lines, and a
+// line-based parser here threw on the continuation, so publishing a post made it
+// unseedable. One format, one parser.
 
-const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
+import { parse as parseYaml } from 'yaml';
+
+const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
 
 export interface ParsedFrontmatter {
   fields: Record<string, string>;
@@ -15,24 +17,35 @@ export interface ParsedFrontmatter {
   hadFrontmatter: boolean;
 }
 
+/**
+ * Parse a document's frontmatter.
+ *
+ * Values are returned as strings so callers can treat them uniformly: numbers and
+ * booleans are stringified, and a list is comma-joined so `parseTags` still reads
+ * both `tags: [a, b]` and `tags: a, b`.
+ *
+ * Throws on frontmatter that is not valid YAML, rather than silently importing a
+ * post with the wrong metadata.
+ */
 export function parseFrontmatter(source: string): ParsedFrontmatter {
   const match = FRONTMATTER.exec(source);
   if (!match) return { fields: {}, body: source, hadFrontmatter: false };
 
-  const fields: Record<string, string> = {};
-  for (const line of match[1].split(/\r?\n/)) {
-    if (!line.trim() || line.trimStart().startsWith('#')) continue;
-    const separator = line.indexOf(':');
-    if (separator === -1) {
-      throw new Error(`Unsupported frontmatter line (expected "key: value"): ${line}`);
-    }
-    const raw = line.slice(separator + 1).trim();
-    const unquoted =
-      (raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))
-        ? raw.slice(1, -1)
-        : raw;
-    fields[line.slice(0, separator).trim()] = unquoted;
+  let parsed: unknown;
+  try {
+    parsed = parseYaml(match[1]);
+  } catch (error) {
+    throw new Error(`Frontmatter is not valid YAML: ${(error as Error).message}`);
   }
+
+  const fields: Record<string, string> = {};
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (value === null || value === undefined) continue;
+      fields[key] = Array.isArray(value) ? value.join(',') : String(value);
+    }
+  }
+
   return { fields, body: source.slice(match[0].length), hadFrontmatter: true };
 }
 

@@ -25,8 +25,15 @@ describe('parseFrontmatter', () => {
     expect(parseFrontmatter("---\ntitle: 'single'\n---\n").fields.title).toBe('single');
   });
 
-  it('keeps a colon inside a value', () => {
-    expect(parseFrontmatter('---\ndescription: a: b: c\n---\n').fields.description).toBe('a: b: c');
+  it('reads a quoted colon inside a value', () => {
+    expect(parseFrontmatter('---\ndescription: "a: b: c"\n---\n').fields.description).toBe('a: b: c');
+  });
+
+  it('rejects an unquoted colon inside a value, which is genuinely invalid YAML', () => {
+    // The line-based parser this replaced accepted this. YAML does not — a plain
+    // scalar cannot contain ": " — so the writer has to quote it. Rejecting it here
+    // matches what applyDraftFlag does on the agent side, so the two agree.
+    expect(() => parseFrontmatter('---\ndescription: a: b: c\n---\n')).toThrow(/not valid YAML/);
   });
 
   it('treats a file without frontmatter as all body', () => {
@@ -42,10 +49,28 @@ describe('parseFrontmatter', () => {
     expect(body).toContain('# Heading');
   });
 
-  it('throws rather than guessing on an unsupported line', () => {
-    expect(() => parseFrontmatter('---\ntitle: ok\n   just a stray line\n---\n')).toThrow(
-      /Unsupported frontmatter line/,
+  it('folds a continuation line into the previous value, as YAML does', () => {
+    // This is what a long description looks like after the agent's YAML
+    // re-serialisation, and the reason this parser must not be line-based.
+    const { fields } = parseFrontmatter('---\ntitle: ok\n  just a stray line\n---\n');
+    expect(fields.title).toBe('ok just a stray line');
+  });
+
+  it('throws on genuinely invalid YAML rather than importing bad metadata', () => {
+    expect(() => parseFrontmatter('---\ntitle: [unclosed\n---\n')).toThrow(/not valid YAML/);
+  });
+
+  it('reads a description wrapped across lines by the YAML serialiser', () => {
+    const { fields } = parseFrontmatter(
+      '---\ntitle: T\ndescription: Every model answers by writing a\n  sentence. Then it does not.\n---\n',
     );
+    expect(fields.description).toBe('Every model answers by writing a sentence. Then it does not.');
+  });
+
+  it('stringifies a real list so parseTags still reads it', () => {
+    const { fields } = parseFrontmatter('---\ntags: [typesafe, system-one-models]\n---\n');
+    expect(fields.tags).toBe('typesafe,system-one-models');
+    expect(parseTags(fields.tags)).toEqual(['typesafe', 'system-one-models']);
   });
 });
 

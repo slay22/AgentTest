@@ -1,9 +1,10 @@
 ---
 title: Jev Decides Instead of Talking
-description: Every frontier model on the market still answers by writing a sentence. On September 15, TypeSafe shipped one that doesn't.
+description: Every frontier model on the market still answers by writing a
+  sentence. On September 15, TypeSafe shipped one that doesn't.
 date: 2026-09-21
-tags: [typesafe, system-one-models, ai-inference, automation]
-draft: true
+tags: [ typesafe, system-one-models, ai-inference, automation ]
+draft: false
 ---
 
 # Jev Decides Instead of Talking
