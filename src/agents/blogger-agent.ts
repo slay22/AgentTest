@@ -21,6 +21,7 @@ import { verifyClaimsTool } from '../tools/verify-claims.ts';
 import { webSearch } from '../tools/web-search.ts';
 import factCheck from '../skills/fact-check/SKILL.md';
 import houseVoice from '../skills/house-voice/SKILL.md';
+import dataVisuals from '../skills/data-visuals/SKILL.md';
 import postMetadata from '../skills/post-metadata/SKILL.md';
 
 // Register a local Lemonade server (OpenAI-compatible) so this agent can run
@@ -81,6 +82,7 @@ export function BloggerAgent() {
 	useSkill(postMetadata);
 	useSkill(houseVoice);
 	useSkill(factCheck);
+	useSkill(dataVisuals);
 
 	useTool(webSearch);
 	useTool(verifyClaimsTool);
@@ -125,6 +127,7 @@ Skills: call activate_skill to load these before doing the relevant work. Do not
 - post-metadata — before creating a draft, or for any question about a title, filename, headings, or frontmatter.
 - house-voice — before writing or revising prose, and whenever the user says a draft sounds generic or flat.
 - fact-check — before telling the user a draft is ready, and before any publish. It is not optional: you must call verify_claims.
+- data-visuals — before adding any chart or graphic, and when a draft compares three or more figures.
 
 Workflow:
 1. Research. When the topic needs facts, dates, names, or recent news, research it with web_search. Search per specific claim rather than once per topic.

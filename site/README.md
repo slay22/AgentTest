@@ -371,6 +371,56 @@ Draft pages send `Cache-Control: no-store` and `X-Robots-Tag: noindex, nofollow`
 part is not an optimisation detail: a cached preview could show you a draft the agent has
 already replaced, and you would approve text you never read.
 
+## Charts
+
+A fenced `chart` block contains a JSON **data spec**, and `src/charts.ts` generates the SVG:
+
+````
+```chart
+{
+  "type": "bar",
+  "title": "Cost per 1,000 decisions",
+  "unit": "USD per 1,000 decisions",
+  "source": "https://example.com/pricing, retrieved 2026-09-21",
+  "items": [
+    { "label": "Standard LLM call", "value": 12.40 },
+    { "label": "Jev (System One)", "value": 0.90 }
+  ]
+}
+```
+````
+
+`source` is required: a chart makes a figure *more convincing*, not more true, so an unsourced
+number in a diagram is worse than one in a sentence. The agent has a `data-visuals` skill covering
+when a chart earns its place and the rule that figures are researched and verified before they are
+charted.
+
+### Why generated SVG rather than mermaid
+
+Mermaid was the obvious candidate and is the wrong tool for this:
+
+| | Generated SVG | Mermaid |
+| --- | --- | --- |
+| Client script | none | ~1 MB, runs on the reader's machine |
+| Renders without JavaScript | yes | no |
+| Can emit its own markup | no — it is built from data | yes |
+| Fits the escape-first renderer | yes | needs an exception |
+| Good at | bar charts, comparisons | flowcharts, sequence diagrams |
+
+The security argument is the important one. The renderer escapes raw HTML deliberately, because
+post bodies derive from web search. Mermaid would need an exception to that, and the exception
+would be reachable by anything that can write a post. Here the block holds *data*, so a chart
+cannot become an injection path — `tests/charts.test.ts` asserts that a `<script>` in a label is
+escaped, and that raw HTML in prose still is too.
+
+Diagrams — flowcharts, sequence diagrams — are where mermaid earns its weight, and adding it stays
+a separate decision.
+
+### Failure is visible
+
+A spec that does not validate renders as an explanatory error in place of the chart, naming the
+offending field, rather than disappearing. The author sees it in the preview.
+
 ## Content safety
 
 Post bodies derive from web search results, so a search passage containing `<script>` can end up

@@ -717,3 +717,43 @@ footer.site a { color: var(--fg); }
 	font-style: italic;
 }
 .draft-note { opacity: 0.7; font-size: 0.9rem; }
+
+/* Charts are generated from a data spec by src/charts.ts — see that file for why
+   they are SVG generated in code rather than a client-side diagram library. */
+.chart {
+	margin: 2rem 0;
+	padding: 1rem 0;
+	border-top: 1px solid var(--nb-border, currentColor);
+	border-bottom: 1px solid var(--nb-border, currentColor);
+}
+.chart-title {
+	font-weight: 600;
+	margin-bottom: 0.75rem;
+}
+.chart svg {
+	display: block;
+	width: 100%;
+	height: auto;
+	overflow: visible;
+}
+.chart-label,
+.chart-value {
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: 13px;
+	fill: currentColor;
+}
+.chart-label { opacity: 0.85; }
+.chart-value { opacity: 0.6; font-variant-numeric: tabular-nums; }
+.chart-bar { fill: currentColor; opacity: 0.35; }
+.chart-meta {
+	margin-top: 0.75rem;
+	font-size: 0.8rem;
+	opacity: 0.6;
+}
+.chart--error {
+	border-color: #c0392b;
+}
+.chart--error pre {
+	margin: 0.5rem 0 0;
+	overflow-x: auto;
+}

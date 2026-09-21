@@ -1,4 +1,5 @@
 import { Marked } from 'marked';
+import { chartError, parseChartSpec } from './charts.ts';
 
 // Markdown -> HTML, used only on the publish path.
 //
@@ -30,6 +31,18 @@ const marked = new Marked({
     // Raw HTML blocks and inline tags become visible text.
     html({ text }) {
       return escapeHtml(text);
+    },
+    // A ```chart fence holds a JSON data spec, not markup: see charts.ts. The
+    // spec is validated and the SVG generated here, so this hook is the only place
+    // a chart reaches the page and it never passes model-supplied HTML through.
+    // A spec that does not validate renders as an explanatory error rather than
+    // silently disappearing, so the author sees the problem in the preview.
+    code({ text, lang }) {
+      if (lang?.trim().toLowerCase() === 'chart') {
+        const result = parseChartSpec(text);
+        return result.ok ? result.svg : chartError(text, result.error);
+      }
+      return false as unknown as string;
     },
     link({ href, title, tokens }) {
       const text = this.parser.parseInline(tokens);
