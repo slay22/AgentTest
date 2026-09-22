@@ -256,9 +256,33 @@ The lever is the model's thinking mode:
 - `reasoning: false` in the provider registration only stops Flue *sending* a thinking level. It
   does not stop the model reasoning on its own, which is why the deltas flow regardless.
 
-Wiring it needs a provider change, since Flue currently drops the thinking level for a model
-declared `reasoning: false`. Two ways: declare `reasoning: true` and see whether `thinkingLevel:
-'off'` reaches the wire as `enable_thinking: false`, or supply a custom `api` that sets it.
+**Where the switch belongs: not in the agent.** `enable_thinking` is a llama.cpp/Qwen
+chat-template parameter. A hosted OpenAI-compatible provider would ignore it or reject it, so it
+must not be hardcoded — the setting is local-only and would be dead config after deploying.
+
+The portable intent is Flue's `thinkingLevel`, and pi-ai already has the seam for translating it:
+
+- `openai-completions` sends an OpenAI-style `reasoning_effort`, whose accepted values are
+  `minimal | low | medium | high | xhigh | max` — **there is no "off"**, which is why
+  `thinkingLevel: 'off'` currently disappears rather than reaching the wire.
+- `model.thinkingLevelMap` maps a level to whatever value that host needs, per model.
+
+So the change is: declare the provider's model `reasoning: true` (the current `false` is simply
+untrue — the model demonstrably reasons, which is why the deltas flow while the thinking level is
+dropped), add a `thinkingLevelMap`, and express a level in the agent. The same line then works
+against a hosted provider, each translating to its own mechanism.
+
+Whether to *want* thinking off is a per-task decision, not a deployment one: planning and tool
+selection benefit from reasoning, mechanical steps do not. And the case for disabling it is
+largely local — at ~20 tokens/second reasoning costs minutes, whereas a hosted model at 100+
+tokens/second may reason and still finish sooner. Measure on the hosted model before turning
+anything off.
+
+**The local server wedges under sustained load.** After a 25-minute agent run plus a series of
+probes, Lemonade's `llama-server` began returning
+`decode() failed: failed to process speculative batch` for every request while `/v1/models` still
+answered 200 — so it looks healthy and is not. It needs a restart. Worth knowing before trusting a
+long local run, and another argument for moving the agent to a hosted model for real drafting.
 
 Caveat before turning it off globally: reasoning helps multi-step tool use, so it may trade
 correctness for speed. Worth testing on a real drafting run rather than assuming.
