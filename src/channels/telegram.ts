@@ -37,6 +37,15 @@ export const channel = createTelegramChannel({
         return;
       }
 
+      // Acknowledge before dispatching. A drafting run takes minutes, and without
+      // this the user cannot tell a working agent from a dropped message —
+      // especially in a client where nothing else would change. This is transport
+      // feedback, so it is code rather than something the model is asked to do.
+      //
+      // Deliberately not fatal: if the acknowledgement fails the message is still
+      // dispatched, because losing a task to a failed nicety would be worse.
+      await acknowledge(incoming.chat.id, incoming.message_thread_id);
+
       const conversation = conversationFromMessage(incoming);
       await dispatch(BloggerAgent, {
         id: channel.instanceId(conversation),
@@ -90,6 +99,27 @@ export const channel = createTelegramChannel({
     }
   },
 });
+
+/**
+ * Tell the user their message arrived, before the agent starts thinking.
+ *
+ * Two calls: the typing indicator is instant but expires after a few seconds, and
+ * the text persists for the length of the run. Neither reveals anything the agent
+ * has not decided yet.
+ */
+async function acknowledge(chatId: number, messageThreadId?: number): Promise<void> {
+  const thread = messageThreadId ? { message_thread_id: messageThreadId } : {};
+  try {
+    await telegramApi().sendChatAction(chatId, 'typing', thread);
+    await telegramApi().sendMessage(
+      chatId,
+      'On it — I will reply when there is something to read.',
+      thread,
+    );
+  } catch (error) {
+    console.warn('telegram_acknowledgement_failed', { chatId, error: (error as Error).message });
+  }
+}
 
 /** Message text, or a short placeholder describing a media-only message. */
 function messageBody(message: Message): string {

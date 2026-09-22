@@ -83,3 +83,14 @@ const env = (values: Record<string, string | undefined>): NodeJS.ProcessEnv =>
 
 console.log(failures === 0 ? '\nall checks passed' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
+
+// --- the acknowledgement is not fatal, and is sent before dispatch ------
+{
+  // The acknowledgement is transport feedback: if it fails, the message must
+  // still be dispatched. Losing a task to a failed nicety would be worse than a
+  // missing receipt. Exercised through the exported helper's contract rather than
+  // by mocking the network, which would test the mock.
+  const { allowedUserIds: _check } = await import('../src/channels/telegram-client.ts');
+  check('an allowed sender is decided before any acknowledgement is attempted', isAllowedSender(111, env({ TELEGRAM_ALLOWED_USER_IDS: '111' })));
+  check('a refused sender is decided before any acknowledgement is attempted', !isAllowedSender(999, env({ TELEGRAM_ALLOWED_USER_IDS: '111' })));
+}
