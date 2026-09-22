@@ -155,7 +155,9 @@ Skills: call activate_skill to load these before doing the relevant work. Do not
 
 Workflow:
 1. Research. When the topic needs facts, dates, names, or recent news, research it with web_search. Search per specific claim rather than once per topic.
-2. Draft. Activate post-metadata, write the draft into ${draftsDir}/, then activate house-voice and revise against it. Treat that directory as your working area: revise files there whenever the user asks for changes. Call preview_draft as soon as there is something worth reading, and again after every revision, then give the user the returned URL so they read it rendered instead of as markdown.
+2. Draft. Activate post-metadata, write the draft into ${draftsDir}/, then activate house-voice and revise against it. Treat that directory as your working area: revise files there whenever the user asks for changes. Call preview_draft as soon as there is something worth reading, and again after every revision.
+
+   Never send a file path to the user. A path like ${draftsDir}/my-post.md is not something they can open, and Telegram turns it into a link to a site that does not exist. Always send the URL preview_draft returns. If a preview could not be saved, say so and describe the draft without naming the file.
 3. Fact-check. Activate fact-check, extract every checkable claim as a self-contained sentence, and pass them to verify_claims in one call. It returns a machine-verified verdict table whose source URLs are copied from real search results. Correct or cut every claim listed in mustFix, then re-verify. A draft is not ready while mustFix is non-empty.
 ${publishStep}
 5. After publishing, report three things literally as the tool returned them: the destination path, whether an existing post was replaced, and the draftFlag value (only "flipped" means the draft flag was actually changed). Also report the blog.updated field: if it is false the post did NOT reach the live site, and you must say so plainly and pass on the reason rather than implying it is live.

@@ -8,7 +8,7 @@
 // Run with `npm run check:telegram`.
 
 import { allowedUserIds, isAllowedSender, refusalReason } from '../src/channels/telegram-client.ts';
-import { postMessage } from '../src/channels/telegram-reply.ts';
+import { postMessage, rejectReply } from '../src/channels/telegram-reply.ts';
 
 let failures = 0;
 function check(name: string, ok: boolean, detail = ''): void {
@@ -79,6 +79,23 @@ const env = (values: Record<string, string | undefined>): NodeJS.ProcessEnv =>
   check('an oversized reply is refused, not sent', output.posted === false);
   check('the refusal names the reason', output.reason === 'too_long', output.reason);
   check('the refusal is actionable', output.detail.includes('4096') && output.detail.includes('summary'));
+}
+// --- a path is not a link ------------------------------------------------
+// Policy only: rejectReply is a pure function of the text, so these need no
+// Telegram token and make no network call. The accepted cases would otherwise hit
+// the real Bot API, which is a test that fails in CI and messages someone.
+{
+  const rejected = (text: string) => rejectReply(text);
+
+  check('a draft path with no URL is rejected', rejected('Draft ready: drafts/post.md')?.reason === 'path_instead_of_link');
+  check('and the reason is actionable', (rejected('Draft ready: drafts/post.md')?.detail ?? '').includes('preview_draft'));
+  check('a path with a leading slash is caught', rejected('see /drafts/post.md') !== null);
+  check('a path in a larger sentence is caught', rejected('Draft is ready: **Title**\n\u2192 drafts/post.md\n\nStructure: ...') !== null);
+  check('a path plus a real URL is accepted', rejected('Draft ready: http://127.0.0.1:8787/drafts/x (from drafts/x.md)') === null);
+  check('a URL alone is accepted', rejected('See https://blog.example.com/drafts/x') === null);
+  check('plain prose is unaffected', rejected('Tightened the second section.') === null);
+  check('mentioning .md without a draft path is fine', rejected('I saved it as a .md file.') === null);
+  check('an unrelated path is fine', rejected('Checked notes/other.md') === null);
 }
 
 console.log(failures === 0 ? '\nall checks passed' : `\n${failures} FAILED`);

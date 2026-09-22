@@ -32,6 +32,34 @@ export const telegramInitialData = v.variant('type', [
   }),
 ]);
 
+export interface ReplyRejection {
+  reason: string;
+  detail: string;
+}
+
+/**
+ * Reject a reply the user could not act on.
+ *
+ * A file path is not a link, and Telegram linkifies one into a fake domain:
+ * `drafts/post.md` becomes https://post.md/, which serves nothing. That is exactly
+ * what happened on a real run — the model reported the path faithfully and had
+ * simply not called preview_draft, so the prompt was not enough.
+ *
+ * Kept as a pure function of the text rather than inline in the tool, so the policy
+ * is testable without a Telegram token or a network call.
+ */
+export function rejectReply(text: string): ReplyRejection | null {
+  const namesADraft = /(?:^|[\s(])(?:\/)?drafts\/[\w.-]+\.md\b/.test(text);
+  const givesAUrl = /https?:\/\/\S+/.test(text);
+  if (!namesADraft || givesAUrl) return null;
+
+  return {
+    reason: 'path_instead_of_link',
+    detail:
+      'This message names a draft file but gives no URL the user can open, and Telegram turns a bare path into a link to something that does not exist. Call preview_draft with that draft path, then send the URL it returns. If the preview cannot be saved, describe the draft without naming the file path.',
+  };
+}
+
 /**
  * Post into the Telegram conversation bound to this agent.
  *
@@ -47,6 +75,9 @@ export function postMessage(ref: TelegramConversationRef) {
       'Post a message into the Telegram conversation bound to this agent. The destination is fixed; you choose only the text. Keep it short: Telegram rejects messages over 4096 characters, so summarise and link to the draft preview or published post rather than pasting the text.',
     input: v.object({ text: v.pipe(v.string(), v.minLength(1)) }),
     async run({ data }) {
+      const rejection = rejectReply(data.text);
+      if (rejection) return { output: { posted: false, ...rejection } };
+
       if (data.text.length > 4096) {
         return {
           output: {
