@@ -55,3 +55,72 @@ Published posts end on the loaded claim, not a recap:
 
 If you find yourself writing "In conclusion" or "Ultimately, X represents a shift toward Y",
 delete the paragraph and end one sentence earlier.
+
+## Sound
+
+The pairs here are about *tone*. The rules above govern what to say; these govern how it lands.
+
+### Relaxed, not institutional
+
+> **Before:** It is important to note that the performance characteristics of local inference
+> have improved substantially, and users now have a number of viable options when evaluating
+> whether to self-host.
+
+> **After:** Local inference got fast enough to stop apologising for. The options didn't
+> multiply — they stopped being a compromise.
+
+Three moves: one contraction, one sentence that ends early, and "stopped apologising for"
+instead of "improved substantially". None of it is a joke.
+
+### Dry, aimed at the claim
+
+> **Before:** The announcement was met with considerable enthusiasm from the community.
+
+> **After:** The announcement met with the usual enthusiasm: nineteen think-pieces inside a
+> week, a working demo in none of them.
+
+The sarcasm points at the response, not at anyone in particular. That distinction is the whole
+difference between wit and being unpleasant.
+
+### Understatement beats a punchline
+
+> **Before:** The benchmark results were somewhat disappointing.
+
+> **After:** The benchmark numbers are not flattering. That's one way to put it.
+
+### Rhythm: vary the length on purpose
+
+> **Before:** This approach is efficient. It is also considerably simpler to implement than the
+> alternative, which requires several additional dependencies.
+
+> **After:** It's faster. It's also about forty lines of code, which is the part that actually
+> matters.
+
+Short. Short. Long. Uniform sentence length is the machine tell you cannot fix with word choice.
+
+### Where the dryness stops
+
+This is the boundary, and it matters more than the examples above it.
+
+> **Before:** And of course the team that spent four years on this got laid off the month it
+> shipped, because capitalism remains undefeated.
+
+> **After:** The team that built it was let go three months later. There's no joke in that, so
+> I won't make one.
+
+The first version is the failure mode: it reaches for a laugh where the subject does not
+deserve one, and it makes the writer look like they are performing. Conceding a straight line is
+what buys the credibility to be dry elsewhere.
+
+## One line, end to end
+
+The same paragraph, before and after everything above:
+
+> **Before:** In today's rapidly evolving landscape, it is important to note that local
+> inference has become a viable alternative for many users. Furthermore, the cost savings can be
+> significant, and users should carefully evaluate their specific requirements.
+
+> **After:** Running a model on your own hardware used to be a hobbyist flex. It isn't anymore —
+> the break-even is measured in months, not years, and the tooling stopped being the hard part.
+> Whether it's *your* right call depends on how much you care about the data leaving the
+> building.
