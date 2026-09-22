@@ -46,7 +46,23 @@ setProvider(
 				api: 'openai-completions',
 				provider: 'lemonade',
 				baseUrl: LEMONADE_BASE_URL,
-				reasoning: false,
+				// True, and it matters. This was `false`, which is untrue for a thinking
+				// model: the flag only controls whether Flue *forwards* a thinking level,
+				// not whether the model reasons. Declared false, the level was dropped
+				// and the model reasoned anyway — measured at 46,692 characters of
+				// reasoning against 1,952 of answer on one run, which was its whole
+				// 25 minutes.
+				reasoning: true,
+				// How Flue's portable thinking levels reach this server. Its
+				// OpenAI-compatible endpoint takes `reasoning_effort`, and 'none' is the
+				// only value it honours: 'low' left reasoning unchanged at 1,542
+				// characters, 'none' took it to zero. Without this map, `thinkingLevel:
+				// 'off'` is sent as `reasoning_effort: 'off'`, which the server rejects.
+				//
+				// The other seam is chatTemplateKwargs with
+				// `{ $var: 'thinking.enabled', omitWhenOff: true }`, which sends
+				// `chat_template_kwargs`. Both work; this one is declarative.
+				thinkingLevelMap: { off: 'none' },
 				input: ['text'],
 				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
 				contextWindow: 262144,
@@ -58,7 +74,15 @@ setProvider(
 );
 
 export function BloggerAgent() {
-	useModel('lemonade/Qwen3.8-27B-GGUF');
+	// Thinking off, for two measured reasons on this local model: it generated 24x
+	// more reasoning than answer, which was the entire 25-minute runtime, and its
+	// turns were truncated — one probe hit the token cap with 333 characters of
+	// answer, while the same prompt with thinking off produced 2,132 in fewer
+	// tokens. Reasoning was crowding out the answer, not improving it.
+	//
+	// This is a local-model setting. A hosted model at 100+ tokens/second may reason
+	// and still finish sooner, so measure there before copying this over.
+	useModel('lemonade/Qwen3.8-27B-GGUF', { thinkingLevel: 'off' });
 	useSandbox(local({}));
 
 	// Present only when Telegram created this conversation. The agent is also run
